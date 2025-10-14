@@ -184,13 +184,13 @@ class BAP_Simulator:
         return trace
 
     def _define_spotty_cellular_trace(self):
-        """Erratic cellular: 32-96 Kbps with 40-60% availability 08:00-22:00."""
+        """Erratic cellular: Very low bandwidth with limited availability."""
         trace = []
         for day in range(5):
             for hour in range(24):
-                if 8 <= hour <= 22 and random.random() < 0.3:  # Reduced to 30% availability
-                    # Much lower bandwidth: 16-32 Kbps
-                    bandwidth = random.uniform(16, 32) * 1024
+                if 8 <= hour <= 22 and random.random() < 0.15:  # Only 15% availability
+                    # Very low bandwidth: 8-16 Kbps
+                    bandwidth = random.uniform(8, 16) * 1024
                     trace.append((bandwidth, 'cellular'))
                 else:
                     trace.append((0, 'none'))
@@ -238,7 +238,7 @@ class BAP_Simulator:
 
             if scheduler_type == 'AcornScheduler':
                 # Chunk-granular download logic
-                net_factor = 1.0 if net_type == 'wifi' else 0.05  # Much lower factor for cellular
+                net_factor = 1.0 if net_type == 'wifi' else 0.01  # Extremely low factor for cellular
                 bw = bandwidth_this_hour
                 while bw > self.avg_chunk_size:
                     best_asset, max_priority = None, -1
