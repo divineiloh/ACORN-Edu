@@ -1,5 +1,5 @@
 scenario,scheduler,bytes_mean_kb,bytes_ci_lower_kb,bytes_ci_upper_kb,hit_rate_mean_percent,hit_rate_ci_lower_percent,hit_rate_ci_upper_percent
 nightly_wifi,DeadlineFIFO_Downloader,169984.0,169984.0,169984.0,100.0,100.0,100.0
-nightly_wifi,AcornScheduler,163840.0,163840.0,163840.0,80.0,80.0,80.0
-spotty_cellular,DeadlineFIFO_Downloader,169984.0,169984.0,169984.0,90.0,82.45947612381967,97.54052387618033
-spotty_cellular,AcornScheduler,163840.0,163840.0,163840.0,68.0,57.99636463199741,78.00363536800259
+nightly_wifi,AcornScheduler,163840.0,163840.0,163840.0,88.0,74.39825238683486,101.60174761316514
+spotty_cellular,DeadlineFIFO_Downloader,169984.0,169983.99999999997,169984.00000000003,84.0,63.22298732632861,104.7770126736714
+spotty_cellular,AcornScheduler,163840.0,163840.0,163840.0,64.0,43.22298732632861,84.7770126736714

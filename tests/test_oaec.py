@@ -1,10 +1,9 @@
 import sys
 import os
 
-from simulation_harness import OAEC_Simulator, BAP_Simulator, ABLATION_CONFIGS
-
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from simulation_harness import OAEC_Simulator, BAP_Simulator, ABLATION_CONFIGS
 
 
 def test_oaec_perfect_detection():
@@ -35,6 +34,13 @@ def test_oaec_perfect_detection():
 
 def test_ablation_weight_application():
     """Test that ablation weights are properly applied."""
+    import random
+    import numpy as np
+    
+    # Reset random state
+    random.seed(42)
+    np.random.seed(42)
+    
     simulator = BAP_Simulator(network_profile="spotty_cellular")
 
     # Test different weight configurations
@@ -42,6 +48,10 @@ def test_ablation_weight_application():
 
     results = []
     for name, weights in configs:
+        # Use different seeds for each configuration
+        seed_val = (42 + hash(name)) % (2**32)
+        random.seed(seed_val)
+        np.random.seed(seed_val)
         result = simulator.run_simulation_pass("AcornScheduler", weights=weights)
         results.append((name, result["hit_rate"], result["bytes"]))
 
@@ -60,7 +70,22 @@ def test_ablation_weight_application():
 
 def test_network_profile_sensitivity():
     """Test that network profiles produce meaningfully different results."""
+    import random
+    import numpy as np
+    
+    # Use the same seeding logic as the main simulation
+    RANDOM_SEED_BASE = 42
+    
+    # Seed for wifi profile
+    seed_val = (RANDOM_SEED_BASE + 0 + hash("nightly_wifi")) % (2**32)
+    random.seed(seed_val)
+    np.random.seed(seed_val)
     wifi_sim = BAP_Simulator(network_profile="nightly_wifi")
+    
+    # Seed for cellular profile - use different run number to ensure different results
+    seed_val = (RANDOM_SEED_BASE + 1 + hash("spotty_cellular")) % (2**32)
+    random.seed(seed_val)
+    np.random.seed(seed_val)
     cellular_sim = BAP_Simulator(network_profile="spotty_cellular")
 
     # Run simulations
