@@ -16,11 +16,13 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
       - name: Lint
-        run: make lint
+        run: flake8 simulation_harness.py tests
       - name: Tests
-        run: make test
+        run: pytest -q
       - name: Run harness (integration)
-        run: make run
+        run: |
+          mkdir -p data figures
+          python simulation_harness.py --runs 10
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
