@@ -25,12 +25,12 @@ jobs:
     
     - name: Lint with flake8
       run: |
-        make lint
+        flake8 src/ tests/
     
     - name: Test with pytest
       run: |
-        make test
+        python -m pytest tests/ -v
     
     - name: Run simulation pipeline
       run: |
-        make run
+        python -m src.simulation_harness
