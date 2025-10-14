@@ -1,6 +1,6 @@
 ablation_config,bytes_mean_kb,bytes_ci_lower_kb,bytes_ci_upper_kb,hit_rate_mean_percent,hit_rate_ci_lower_percent,hit_rate_ci_upper_percent
 Full AcornScheduler,163840.0,163840.0,163840.0,80.0,80.0,80.0
-No Deadline (alpha=0),163840.0,163840.0,163840.0,100.0,100.0,100.0
+No Deadline (alpha=0),163840.0,163840.0,163840.0,98.66666666666667,96.77194320020403,100.56139013312931
 No Reuse (beta=0),163840.0,163840.0,163840.0,80.0,80.0,80.0
 No Size (gamma=0),163840.0,163840.0,163840.0,80.0,80.0,80.0
 No Network (delta=0),163840.0,163840.0,163840.0,80.0,80.0,80.0
