@@ -18,7 +18,7 @@ def test_units_kb():
     abl = pd.read_csv("data/bap_ablation_study_results.csv")
 
     # Check network CSV headers
-    kb_cols = {"bytes_mean_kb", "bytes_ci_lower_kb", "bytes_ci_upper_kb"}
+    kb_cols = {"bytes_mean_(KB)", "bytes_ci_lower_(KB)", "bytes_ci_upper_(KB)"}
     assert kb_cols.issubset(set(net.columns))
 
     # Check ablation CSV headers
@@ -43,11 +43,11 @@ def test_profiles_diverge():
 
     # Either bytes or hit rate should differ significantly
     bytes_diff = abs(
-        wifi_data["bytes_mean_kb"].iloc[0] - cellular_data["bytes_mean_kb"].iloc[0]
+        wifi_data["bytes_mean_(KB)"].iloc[0] - cellular_data["bytes_mean_(KB)"].iloc[0]
     )
     hit_rate_diff = abs(
-        wifi_data["hit_rate_mean_percent"].iloc[0]
-        - cellular_data["hit_rate_mean_percent"].iloc[0]
+        wifi_data["hit_rate_mean_(%)"].iloc[0]
+        - cellular_data["hit_rate_mean_(%)"].iloc[0]
     )
 
     assert (
@@ -63,8 +63,8 @@ def test_ablation_varies():
     assert len(abl) > 1
 
     # Check for variation in results
-    hit_rate_variation = abl["hit_rate_mean_percent"].nunique() > 1
-    bytes_variation = abl["bytes_mean_kb"].nunique() > 1
+    hit_rate_variation = abl["hit_rate_mean_(%)"].nunique() > 1
+    bytes_variation = abl["bytes_mean_(KB)"].nunique() > 1
 
     assert hit_rate_variation or bytes_variation, "Ablation results are identical"
 
@@ -124,18 +124,18 @@ def test_data_quality():
     abl = pd.read_csv("data/bap_ablation_study_results.csv")
 
     # Check for reasonable value ranges
-    assert net["hit_rate_mean_percent"].min() >= 0
-    assert net["hit_rate_mean_percent"].max() <= 100
-    assert abl["hit_rate_mean_percent"].min() >= 0
-    assert abl["hit_rate_mean_percent"].max() <= 100
+    assert net["hit_rate_mean_(%)"].min() >= 0
+    assert net["hit_rate_mean_(%)"].max() <= 100
+    assert abl["hit_rate_mean_(%)"].min() >= 0
+    assert abl["hit_rate_mean_(%)"].max() <= 100
 
     # Check for positive byte values
-    assert net["bytes_mean_kb"].min() > 0
-    assert abl["bytes_mean_kb"].min() > 0
+    assert net["bytes_mean_(KB)"].min() > 0
+    assert abl["bytes_mean_(KB)"].min() > 0
 
     # Check confidence intervals are reasonable
     for df in [net, abl]:
-        for col in ["bytes_mean_kb", "hit_rate_mean_percent"]:
+        for col in ["bytes_mean_(KB)", "hit_rate_mean_(%)"]:
             mean_col = col
             lower_col = col.replace("mean", "ci_lower")
             upper_col = col.replace("mean", "ci_upper")
