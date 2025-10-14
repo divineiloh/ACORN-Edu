@@ -1,0 +1,6 @@
+asset_id,size_(KB),delta1_ratio,delta2_ratio,savings_(%)
+Lecture 1 Video,52428.8,0.1,0.07,91.5
+Reading 1 PDF,2097.152,0.08,0.05,93.5
+Quiz 1 Data,524.288,0.15,0.1,87.5
+Lecture 2 Video,89128.96,0.1,0.07,91.5
+Project Spec PDF,9437.184,0.08,0.05,93.5
