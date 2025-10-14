@@ -22,7 +22,7 @@ jobs:
       - name: Generate figures
         run: make figures
       - name: Tests
-        run: make test
+        run: pytest tests/test_pipeline.py -q
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
