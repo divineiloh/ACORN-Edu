@@ -23,18 +23,8 @@ jobs:
         run: |
           mkdir -p data figures
           python simulation_harness.py --runs 10
-      - name: Verify outputs
-        run: |
-          # Check that all expected files exist
-          test -f data/bap_network_scenario_results.csv
-          test -f data/bap_ablation_study_results.csv
-          test -f data/oaec_confusion_matrix.csv
-          test -f data/run_metadata.json
-          test -f figures/network_bytes.png
-          test -f figures/network_hitrate.png
-          test -f figures/ablation_hitrate.png
-          test -f figures/ablation_bytes.png
-          echo "All expected output files present"
+      - name: Verify expected artifacts
+        run: make verify-artifacts
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

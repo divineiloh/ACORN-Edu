@@ -8,7 +8,7 @@ This project provides a complete, runnable simulation of the core components des
 
 - **BAP (Bandwidth-Aware Packaging)**: Intelligent content prefetching with deadline awareness
 - **OAEC (Offline Assessment & Evidence Chain)**: Tamper-evident exam authentication
-- **CAG (Curriculum Audit and Gap)**: Automated curriculum coverage analysis
+- **CAG (Curriculum Alignment Graph)**: Automated curriculum coverage analysis
 
 ## Quick Start
 
@@ -99,6 +99,14 @@ All simulation parameters are defined in `simulation_harness.py`:
 - **Scheduler Configurations**: AcornScheduler algorithm parameters
 - **Ablation Study**: Component importance analysis
 
+### Policies in the CSVs
+
+| policy label | description |
+|--------------|-------------|
+| `AcornScheduler` | AcornScheduler (deadline urgency + reuse + inverse size + predicted availability) |
+| `StandardLRU_Prefetcher` | Standard LRU prefetcher: whole-asset download, deadline-ordered, LRU cache |
+| `DeadlineFIFO_Downloader` | Baseline: file-granular, deadline-ordered, no chunk reuse |
+
 ## Output
 
 The simulation generates:
@@ -107,10 +115,12 @@ The simulation generates:
 - **Figures**: Performance comparison charts (300 DPI, ≥12pt fonts)
 - **Metadata**: Run parameters and timestamps
 
-### Statistics & Units
+### Statistics & Units (contract)
 
-- **Units**: All size metrics in KB only (column names end with `_kb`)
-- **Statistics**: N=30 trials with two-sided 95% Student-t confidence intervals
+- **Trials**: N=30 per scenario × policy, seeded RNG
+- **Intervals**: Two-sided 95% Student-t CIs (unknown σ)
+- **Units**: KB only for sizes. Any size column name ends with `_kb`
+- **Figures**: One metric per image; bars show 95% CI; axes labeled in KB where applicable
 - **Output Location**: `data/` and `figures/` directories
 
 ### Expected Output Files

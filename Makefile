@@ -21,3 +21,11 @@ run:
 
 clean:
 	rm -rf data figures
+
+verify-artifacts:
+	@test -f data/bap_network_scenario_results.csv
+	@test -f data/bap_ablation_study_results.csv
+	@test -f figures/network_bytes.png
+	@test -f figures/network_hitrate.png
+	@test -f figures/ablation_hitrate.png
+	@test -f figures/ablation_bytes.png
