@@ -161,6 +161,15 @@ def t_ci(series: np.ndarray, alpha=0.05) -> float:
     return half
 
 def run_all():
+    # clean up old results
+    import glob
+    for pattern in ["data/*.csv", "data/*.json", "figures/*.png"]:
+        for f in glob.glob(pattern):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    
     # base + ablations
     ablations = {
         "full":   dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),
@@ -218,7 +227,7 @@ def run_all():
         plt.title(f"Bytes (KB) – {sc}")
         plt.tight_layout()
         plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
-        plt.clf()
+        plt.close()
 
     # per-scenario hit-rate plots (%)
     plt.figure(figsize=(6,4))
@@ -231,7 +240,7 @@ def run_all():
         plt.title(f"Hit rate (%) – {sc}")
         plt.tight_layout()
         plt.savefig(OUT_FIGS/f"bap_hit_rate_comparison_{sc}.png", dpi=DPI)
-        plt.clf()
+        plt.close()
 
     # default-named pair for quick checks (bigger canvas + two-line ticks)
     sub = agg.sort_values(["scenario","policy"]).reset_index(drop=True)
@@ -245,7 +254,7 @@ def run_all():
     plt.gcf().subplots_adjust(bottom=0.25)  # prevent label overlap
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI)
-    plt.clf()
+    plt.close()
 
     plt.figure(figsize=(10, 5))
     plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
@@ -254,7 +263,7 @@ def run_all():
     plt.gcf().subplots_adjust(bottom=0.25)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI)
-    plt.clf()
+    plt.close()
 
     # -------- Ablation figures (acorn only, from RAW trials for correct CI) --------
     # Recompute ablation means + CIs from per-trial data (dfa) across all scenarios.
@@ -285,7 +294,7 @@ def run_all():
     plt.gcf().subplots_adjust(bottom=0.30)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"ablation_hit_rate.png", dpi=DPI)
-    plt.clf()
+    plt.close()
 
     plt.figure(figsize=(12,5))
     plt.bar(x, abl_bytes.loc[abl_order,"mean"], yerr=abl_bytes.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#ffb3b3")
@@ -295,7 +304,7 @@ def run_all():
     plt.gcf().subplots_adjust(bottom=0.30)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"ablation_bytes.png", dpi=DPI)
-    plt.clf()
+    plt.close()
 
     # metadata
     # obtain current git commit (if available)
