@@ -185,16 +185,25 @@ def run_all():
         for policy in ["acorn", "LRU_whole"]:
             for s in seeds:
                 rows.append(run_trial(scenario, policy, ablations["full"], s))
-        # ablations (acorn only)
+        # ablations (acorn only) - use different seeds for each ablation
         for abl, w in ablations.items():
-            for s in seeds:
+            # create unique seeds for this ablation by adding a hash of the ablation name
+            abl_seeds = [s + hash(abl) % 10000 for s in seeds]
+            for s in abl_seeds:
                 r = run_trial(scenario, "acorn", w, s)
                 r.update(ablation=abl)
                 ablrows.append(r)
 
     df = pd.DataFrame(rows)
+    # round all numeric columns to 1 decimal place
+    for col in df.select_dtypes(include=[np.number]).columns:
+        df[col] = df[col].round(1)
     df.to_csv(OUT_DATA/"bap_network_scenario_results.csv", index=False)
+    
     dfa = pd.DataFrame(ablrows)
+    # round all numeric columns to 1 decimal place
+    for col in dfa.select_dtypes(include=[np.number]).columns:
+        dfa[col] = dfa[col].round(1)
     dfa.to_csv(OUT_DATA/"bap_ablation_study_results.csv", index=False)
 
     # aggregates + CIs
@@ -205,6 +214,9 @@ def run_all():
     ).reset_index()
     agg["ci95_bytes_kb"] = df.groupby(["scenario","policy"])["bytes_kb"].apply(lambda s: t_ci(s.values)).values
     agg["ci95_hit_rate"] = df.groupby(["scenario","policy"])["hit_rate"].apply(lambda s: t_ci(s.values)).values
+    # round all numeric columns to 1 decimal place
+    for col in agg.select_dtypes(include=[np.number]).columns:
+        agg[col] = agg[col].round(1)
     agg.to_csv(OUT_DATA/"bap_network_scenario_aggregates.csv", index=False)
 
     aggA = dfa.groupby(["scenario","policy","ablation"]).agg(
@@ -214,6 +226,9 @@ def run_all():
     ).reset_index()
     aggA["ci95_bytes_kb"] = dfa.groupby(["scenario","policy","ablation"])["bytes_kb"].apply(lambda s: t_ci(s.values)).values
     aggA["ci95_hit_rate"] = dfa.groupby(["scenario","policy","ablation"])["hit_rate"].apply(lambda s: t_ci(s.values)).values
+    # round all numeric columns to 1 decimal place
+    for col in aggA.select_dtypes(include=[np.number]).columns:
+        aggA[col] = aggA[col].round(1)
     aggA.to_csv(OUT_DATA/"bap_ablation_study_aggregates.csv", index=False)
 
     # -------- figures (one metric per image) --------
