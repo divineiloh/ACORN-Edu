@@ -48,6 +48,11 @@ Thumbs.db
 output/
 *.log
 
+# Generated data and figures (for single-file approach)
+data/*.csv
+data/*.json
+figures/*.png
+
 # Testing
 .pytest_cache/
 .coverage
