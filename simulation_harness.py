@@ -538,6 +538,10 @@ def calculate_cis(data, confidence=0.95):
     if "hit_rate" in str(data) or any(x > 50 for x in data):  # Likely hit rate data
         lower = max(0, min(100, lower))
         upper = max(0, min(100, upper))
+    
+    # Ensure all confidence intervals are non-negative
+    lower = max(0, lower)
+    upper = max(0, upper)
 
     # For small sample sizes, use a more conservative approach
     if n < 10:
