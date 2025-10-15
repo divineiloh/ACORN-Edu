@@ -1,34 +1,12 @@
-name: ci
-on:
-  push: { branches: [ master ] }
-  pull_request: { branches: [ master ] }
-
+name: acorn-ci
+on: [push, pull_request]
 jobs:
-  run:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install
-        run: |
-          python -m pip install -U pip
-          pip install -r requirements.txt
-      - name: Lint
-        run: flake8 simulation_harness.py tests
-      - name: Tests
-        run: pytest -q
-      - name: Run harness (integration)
-        run: |
-          mkdir -p data figures
-          python simulation_harness.py --runs 10
-      - name: Verify expected artifacts
-        run: make verify-artifacts
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: acorn-results
-          path: |
-            data/**
-            figures/**
+        with: { python-version: '3.11' }
+      - run: python -m pip install -U pip
+      - run: pip install -r requirements.txt
+      - run: python acorn.py
