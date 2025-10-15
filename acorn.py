@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
+plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
 
 # -------------------- CONFIG --------------------
 RNG_SEED_BASE = 1337
@@ -216,13 +217,17 @@ def run_all():
         plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
         plt.clf()
 
-    # default-named pair for quick checks
+    # default-named pair for quick checks (with readable tick labels)
     sub = agg.copy()
-    plt.bar(np.arange(len(sub)), sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], capsize=4)
+    x = np.arange(len(sub))
+    xt = (sub["scenario"] + " | " + sub["policy"]).tolist()
+    plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], capsize=4)
+    plt.xticks(x, xt, rotation=0)
     plt.ylabel("KB transferred"); plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI); plt.clf()
 
-    plt.bar(np.arange(len(sub)), 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], capsize=4)
+    plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], capsize=4)
+    plt.xticks(x, xt, rotation=0)
     plt.ylabel("Hit rate (%)"); plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI); plt.clf()
 
@@ -237,9 +242,12 @@ def run_all():
 
 # -------------------- VERIFY --------------------
 def verify():
+    # presence: include both per-trial CSVs and aggregate CSVs
     req_csvs = [
         OUT_DATA/"bap_network_scenario_results.csv",
+        OUT_DATA/"bap_network_scenario_aggregates.csv",
         OUT_DATA/"bap_ablation_study_results.csv",
+        OUT_DATA/"bap_ablation_study_aggregates.csv",
     ]
     req_figs = [
         OUT_FIGS/"bap_hit_rate_comparison.png",
@@ -261,6 +269,31 @@ def verify():
         if (df[c] < 0).any(): raise SystemExit(f"Negative KB in {c}")
     if not ((df["hit_rate"]>=0)&(df["hit_rate"]<=1)).all():
         raise SystemExit("hit_rate out of [0,1]")
+
+    # scenario separation guardrail: require >=15% difference between scenarios
+    agg = pd.read_csv(OUT_DATA/"bap_network_scenario_aggregates.csv")
+    if not {"scenario","policy","mean_bytes_kb","mean_hit_rate"}.issubset(agg.columns):
+        raise SystemExit("aggregates.csv missing expected columns")
+    if agg["scenario"].nunique() >= 2:
+        # compare scenario means (averaged across policies) — must differ by >=15% in KB or hit rate
+        sc_means = agg.groupby("scenario").agg(
+            mbytes=("mean_bytes_kb","mean"),
+            mhit=("mean_hit_rate","mean")
+        )
+        vals = sc_means.to_dict(orient="index")
+        scens = list(vals.keys())
+        # check any pair
+        def rel_diff(a,b):
+            return abs(a-b)/a if a>0 else (float("inf") if b>0 else 0.0)
+        ok = False
+        for i in range(len(scens)-1):
+            a, b = scens[i], scens[i+1]
+            kb_delta = rel_diff(vals[a]["mbytes"], vals[b]["mbytes"])
+            hr_delta = rel_diff(vals[a]["mhit"], vals[b]["mhit"])
+            if max(kb_delta, hr_delta) >= 0.15:
+                ok = True; break
+        if not ok:
+            raise SystemExit("Scenarios too similar: expected >=15% difference in KB or hit-rate between scenarios")
 
 if __name__ == "__main__":
     run_all()
