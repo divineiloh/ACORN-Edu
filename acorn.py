@@ -13,6 +13,9 @@ import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
 plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
+# unified errorbar styling (consistent across all figures)
+ERR_KW = dict(capsize=6)
+BAR_EDGE_KW = dict(edgecolor="black", linewidth=0.6)
 
 # -------------------- CONFIG --------------------
 RNG_SEED_BASE = 1337
@@ -143,7 +146,7 @@ def run_trial(scenario_name: str, policy: str, weights: Dict[str,float], trial_s
     windows = gen_windows(SCENARIOS[scenario_name], rng)
     if policy == "acorn":
         bkb, hr = policy_acorn(assets, windows, rng, weights)
-    elif policy == "lru_whole":
+    elif policy == "LRU_whole":
         bkb, hr = policy_lru_whole(assets, windows, rng)
     else:
         raise ValueError(policy)
@@ -170,7 +173,7 @@ def run_all():
     seeds = [RNG_SEED_BASE + i for i in range(N_TRIALS)]
     for scenario in SCENARIOS.keys():
         # base policies
-        for policy in ["acorn", "lru_whole"]:
+        for policy in ["acorn", "LRU_whole"]:
             for s in seeds:
                 rows.append(run_trial(scenario, policy, ablations["full"], s))
         # ablations (acorn only)
@@ -204,12 +207,12 @@ def run_all():
     aggA["ci95_hit_rate"] = dfa.groupby(["scenario","policy","ablation"])["hit_rate"].apply(lambda s: t_ci(s.values)).values
     aggA.to_csv(OUT_DATA/"bap_ablation_study_aggregates.csv", index=False)
 
-    # figures (one metric per image)
+    # -------- figures (one metric per image) --------
     plt.figure(figsize=(6,4))
     for sc in SCENARIOS.keys():
         sub = agg[agg["scenario"]==sc]
         x = np.arange(len(sub))
-        plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], capsize=4)
+        plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
         plt.xticks(x, sub["policy"], rotation=0)
         plt.ylabel("KB transferred")
         plt.title(f"Bytes (KB) – {sc}")
@@ -217,19 +220,82 @@ def run_all():
         plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
         plt.clf()
 
-    # default-named pair for quick checks (with readable tick labels)
-    sub = agg.copy()
-    x = np.arange(len(sub))
-    xt = (sub["scenario"] + " | " + sub["policy"]).tolist()
-    plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], capsize=4)
-    plt.xticks(x, xt, rotation=0)
-    plt.ylabel("KB transferred"); plt.tight_layout()
-    plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI); plt.clf()
+    # per-scenario hit-rate plots (%)
+    plt.figure(figsize=(6,4))
+    for sc in SCENARIOS.keys():
+        sub = agg[agg["scenario"]==sc]
+        x = np.arange(len(sub))
+        plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
+        plt.xticks(x, sub["policy"], rotation=0)
+        plt.ylabel("Hit rate (%)")
+        plt.title(f"Hit rate (%) – {sc}")
+        plt.tight_layout()
+        plt.savefig(OUT_FIGS/f"bap_hit_rate_comparison_{sc}.png", dpi=DPI)
+        plt.clf()
 
-    plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], capsize=4)
-    plt.xticks(x, xt, rotation=0)
-    plt.ylabel("Hit rate (%)"); plt.tight_layout()
-    plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI); plt.clf()
+    # default-named pair for quick checks (bigger canvas + two-line ticks)
+    sub = agg.sort_values(["scenario","policy"]).reset_index(drop=True)
+    x = np.arange(len(sub))
+    xt = [f"{sc}\n{pol}" for sc, pol in zip(sub["scenario"], sub["policy"])]
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
+    plt.xticks(x, xt, rotation=0, ha="center")
+    plt.ylabel("KB transferred")
+    plt.gcf().subplots_adjust(bottom=0.25)  # prevent label overlap
+    plt.tight_layout()
+    plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI)
+    plt.clf()
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
+    plt.xticks(x, xt, rotation=0, ha="center")
+    plt.ylabel("Hit rate (%)")
+    plt.gcf().subplots_adjust(bottom=0.25)
+    plt.tight_layout()
+    plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI)
+    plt.clf()
+
+    # -------- Ablation figures (acorn only, from RAW trials for correct CI) --------
+    # Recompute ablation means + CIs from per-trial data (dfa) across all scenarios.
+    def _agg_with_ci(df_series):
+        return pd.Series({
+            "mean": df_series.mean(),
+            "ci95": t_ci(df_series.to_numpy())
+        })
+    abl_bytes = dfa.groupby("ablation")["bytes_kb"].apply(_agg_with_ci).unstack()
+    abl_hit   = dfa.groupby("ablation")["hit_rate"].apply(_agg_with_ci).unstack()
+    # Pretty order + labels
+    abl_order = ["full","alpha0","beta0","gamma0","delta0"]
+    pretty = {
+        "full":"Full AcornScheduler",
+        "alpha0":"No Deadline Priority",
+        "beta0":"No Reuse Priority",
+        "gamma0":"No Size Priority",
+        "delta0":"No Network Priority",
+    }
+    x = np.arange(len(abl_order))
+    labels = [pretty[a] for a in abl_order]
+
+    plt.figure(figsize=(12,5))
+    plt.bar(x, 100*abl_hit.loc[abl_order,"mean"], yerr=100*abl_hit.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#9bd0ff")
+    plt.xticks(x, labels, rotation=0, ha="center")
+    plt.ylabel("Prefetch Hit Rate (%)")
+    plt.title("ACORN-Edu Ablation: Hit Rate")
+    plt.gcf().subplots_adjust(bottom=0.30)
+    plt.tight_layout()
+    plt.savefig(OUT_FIGS/"ablation_hit_rate.png", dpi=DPI)
+    plt.clf()
+
+    plt.figure(figsize=(12,5))
+    plt.bar(x, abl_bytes.loc[abl_order,"mean"], yerr=abl_bytes.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#ffb3b3")
+    plt.xticks(x, labels, rotation=0, ha="center")
+    plt.ylabel("Bytes Transferred (KB)")
+    plt.title("ACORN-Edu Ablation: Bandwidth")
+    plt.gcf().subplots_adjust(bottom=0.30)
+    plt.tight_layout()
+    plt.savefig(OUT_FIGS/"ablation_bytes.png", dpi=DPI)
+    plt.clf()
 
     # metadata
     # obtain current git commit (if available)
@@ -244,7 +310,7 @@ def run_all():
         "n_trials": N_TRIALS,
         "timestamp": int(time.time()),
         "git_rev": _git_rev(),
-        "policies": ["acorn","lru_whole"],
+        "policies": ["acorn","LRU_whole"],
         "ablations": ["full","alpha0","beta0","gamma0","delta0"]
     }, indent=2))
 
@@ -260,6 +326,8 @@ def verify():
     req_figs = [
         OUT_FIGS/"bap_hit_rate_comparison.png",
         OUT_FIGS/"bap_bytes_comparison.png",
+        OUT_FIGS/"ablation_hit_rate.png",
+        OUT_FIGS/"ablation_bytes.png",
     ]
     miss = [str(p) for p in req_csvs+req_figs if not p.exists()]
     if miss: raise SystemExit("Missing artifacts:\n- "+"\n- ".join(miss))
@@ -267,8 +335,8 @@ def verify():
     df = pd.read_csv(req_csvs[0])
     need = {"scenario","policy","trial","bytes_kb","hit_rate","seed"}
     if not need.issubset(df.columns): raise SystemExit("results.csv missing cols")
-    if set(df["policy"].unique()) != {"acorn","lru_whole"}:
-        raise SystemExit("Policy set must be exactly {acorn,lru_whole}")
+    if set(df["policy"].unique()) != {"acorn","LRU_whole"}:
+        raise SystemExit("Policy set must be exactly {acorn,LRU_whole}")
     ct = df.groupby(["scenario","policy"])["trial"].nunique()
     if ct.min()!=N_TRIALS or ct.max()!=N_TRIALS:
         raise SystemExit(f"Each scenario×policy must have exactly {N_TRIALS} trials")

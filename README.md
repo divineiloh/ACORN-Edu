@@ -3,7 +3,7 @@
 This repo contains a **one-file** simulation harness for an offline-first delivery study.
 
 ## Standards
-- Policies: `acorn` (deadline + reuse + inv size + availability), `lru_whole` (whole-asset, deadline-ordered, LRU cache)
+- Policies: `acorn` (deadline + reuse + inv size + availability), `LRU_whole` (whole-asset, deadline-ordered, LRU cache)
 - Trials/Stats: **N=30** trials per scenario×policy; **two-sided 95% Student-t CIs**
 - Units: **KB only** for sizes; any size column ends with `_kb`
 - Outputs: `data/*.csv`, `data/run_metadata.json`, `figures/*.png`
@@ -27,3 +27,5 @@ python acorn.py --trials 3 --seed 2025
 * `data/run_metadata.json`
 * `figures/bap_bytes_comparison.png`
 * `figures/bap_hit_rate_comparison.png`
+* `figures/ablation_hit_rate.png`
+* `figures/ablation_bytes.png`
