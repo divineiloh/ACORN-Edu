@@ -138,13 +138,13 @@ def create_ablation_hitrate_plot():
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Simple config names
+    # More legible config names
     config_names = {
-        "Full AcornScheduler": "Full",
-        "No Deadline (alpha=0)": "No Deadline",
-        "No Reuse (beta=0)": "No Reuse",
-        "No Size (gamma=0)": "No Size",
-        "No Network (delta=0)": "No Network",
+        "Full AcornScheduler": "Full AcornScheduler",
+        "No Deadline (alpha=0)": "No Deadline Priority",
+        "No Reuse (beta=0)": "No Reuse Priority",
+        "No Size (gamma=0)": "No Size Priority",
+        "No Network (delta=0)": "No Network Priority",
     }
 
     configs = [config_names.get(name, name) for name in df["ablation_config"].values]
@@ -186,13 +186,13 @@ def create_ablation_bytes_plot():
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Simple config names
+    # More legible config names
     config_names = {
-        "Full AcornScheduler": "Full",
-        "No Deadline (alpha=0)": "No Deadline",
-        "No Reuse (beta=0)": "No Reuse",
-        "No Size (gamma=0)": "No Size",
-        "No Network (delta=0)": "No Network",
+        "Full AcornScheduler": "Full AcornScheduler",
+        "No Deadline (alpha=0)": "No Deadline Priority",
+        "No Reuse (beta=0)": "No Reuse Priority",
+        "No Size (gamma=0)": "No Size Priority",
+        "No Network (delta=0)": "No Network Priority",
     }
 
     configs = [config_names.get(name, name) for name in df["ablation_config"].values]

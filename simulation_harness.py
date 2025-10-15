@@ -528,6 +528,14 @@ if __name__ == "__main__":
     args = parse_args()
     NUM_SIMULATION_RUNS = args.runs
 
+    # Clean old results before starting
+    import shutil
+
+    if os.path.exists("data"):
+        shutil.rmtree("data")
+    if os.path.exists("figures"):
+        shutil.rmtree("figures")
+
     os.makedirs("data", exist_ok=True)
     os.makedirs("figures", exist_ok=True)
 
