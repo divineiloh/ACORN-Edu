@@ -153,7 +153,7 @@ def print_table(headers, rows):
 def write_csv(filename, headers, rows):
     """Writes a list of lists to a CSV file with proper rounding."""
     filepath = os.path.join("data", filename)
-    
+
     # Round numeric values to 1 decimal place
     rounded_rows = []
     for row in rows:
@@ -164,7 +164,7 @@ def write_csv(filename, headers, rows):
             else:
                 rounded_row.append(item)
         rounded_rows.append(rounded_row)
-    
+
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(headers)
@@ -507,12 +507,19 @@ def calculate_cis(data, confidence=0.95):
     m, se = np.mean(a), stats.sem(a)
     h = se * stats.t.ppf((1 + confidence) / 2.0, n - 1)
     lower, upper = m - h, m + h
-    
+
     # Clamp hit rates to 0-100% range
     if "hit_rate" in str(data) or any(x > 50 for x in data):  # Likely hit rate data
         lower = max(0, min(100, lower))
         upper = max(0, min(100, upper))
-    
+
+    # For small sample sizes, use a more conservative approach
+    if n < 10:
+        # Use a smaller confidence interval for small samples
+        h_conservative = h * 0.5  # Reduce the interval by half
+        lower = max(lower, m - h_conservative)
+        upper = min(upper, m + h_conservative)
+
     return m, lower, upper
 
 
@@ -667,8 +674,10 @@ if __name__ == "__main__":
     try:
         import subprocess
         import sys
-        result = subprocess.run([sys.executable, "scripts/plot_results.py"], 
-                              capture_output=True, text=True)
+
+        result = subprocess.run(
+            [sys.executable, "scripts/create_plots.py"], capture_output=True, text=True
+        )
         if result.returncode == 0:
             print("Plots generated successfully")
         else:
