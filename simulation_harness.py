@@ -151,12 +151,24 @@ def print_table(headers, rows):
 
 
 def write_csv(filename, headers, rows):
-    """Writes a list of lists to a CSV file."""
+    """Writes a list of lists to a CSV file with proper rounding."""
     filepath = os.path.join("data", filename)
+    
+    # Round numeric values to 1 decimal place
+    rounded_rows = []
+    for row in rows:
+        rounded_row = []
+        for item in row:
+            if isinstance(item, (int, float)):
+                rounded_row.append(round(float(item), 1))
+            else:
+                rounded_row.append(item)
+        rounded_rows.append(rounded_row)
+    
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(headers)
-        writer.writerows(rows)
+        writer.writerows(rounded_rows)
     print(f"Saved results to '{filepath}'")
 
 
@@ -494,7 +506,14 @@ def calculate_cis(data, confidence=0.95):
         )
     m, se = np.mean(a), stats.sem(a)
     h = se * stats.t.ppf((1 + confidence) / 2.0, n - 1)
-    return m, m - h, m + h
+    lower, upper = m - h, m + h
+    
+    # Clamp hit rates to 0-100% range
+    if "hit_rate" in str(data) or any(x > 50 for x in data):  # Likely hit rate data
+        lower = max(0, min(100, lower))
+        upper = max(0, min(100, upper))
+    
+    return m, lower, upper
 
 
 # --- Main Execution Block ---
@@ -642,6 +661,20 @@ if __name__ == "__main__":
     # Sanity checks
     sanity_check_csv("data/bap_network_scenario_results.csv", ["scenario", "scheduler"])
     sanity_check_csv("data/bap_ablation_study_results.csv", ["ablation_config"])
+
+    # Generate plots
+    print("\n--- Generating Plots ---")
+    try:
+        import subprocess
+        import sys
+        result = subprocess.run([sys.executable, "scripts/plot_results.py"], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            print("Plots generated successfully")
+        else:
+            print(f"Plot generation failed: {result.stderr}")
+    except Exception as e:
+        print(f"Could not generate plots: {e}")
 
     run_metadata = {
         "seed_base": RANDOM_SEED_BASE,
