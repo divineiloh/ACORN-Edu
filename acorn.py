@@ -3,7 +3,7 @@
 # Requires: numpy, pandas, scipy, matplotlib
 
 from __future__ import annotations
-import json, math, os, random, time
+import json, math, os, random, time, subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -232,10 +232,18 @@ def run_all():
     plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI); plt.clf()
 
     # metadata
+    # obtain current git commit (if available)
+    def _git_rev():
+        try:
+            return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+        except Exception:
+            return None
+
     (OUT_DATA/"run_metadata.json").write_text(json.dumps({
         "seed_base": RNG_SEED_BASE,
         "n_trials": N_TRIALS,
         "timestamp": int(time.time()),
+        "git_rev": _git_rev(),
         "policies": ["acorn","lru_whole"],
         "ablations": ["full","alpha0","beta0","gamma0","delta0"]
     }, indent=2))
@@ -296,6 +304,16 @@ def verify():
             raise SystemExit("Scenarios too similar: expected >=15% difference in KB or hit-rate between scenarios")
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="ACORN-Edu single-file harness")
+    ap.add_argument("--trials", type=int, default=N_TRIALS, help="override number of trials (default: 30)")
+    ap.add_argument("--seed", type=int, default=RNG_SEED_BASE, help="override base RNG seed (default: 1337)")
+    args = ap.parse_args()
+
+    # override globals for this run
+    N_TRIALS = args.trials
+    RNG_SEED_BASE = args.seed
+
     run_all()
     verify()
     print("OK: data/*.csv + figures/*.png + run_metadata.json written (KB-only; 95% t-CIs)")

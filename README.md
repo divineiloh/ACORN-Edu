@@ -15,6 +15,9 @@ pip install -r requirements.txt
 python acorn.py
 ```
 
+# fast smoke (3 trials; skips statistical meaning)
+python acorn.py --trials 3 --seed 2025
+
 ## Expected artifacts
 
 * `data/bap_network_scenario_results.csv`
