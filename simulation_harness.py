@@ -62,7 +62,7 @@ ASSETS = [
 NETWORK_PROFILES = ["nightly_wifi", "spotty_cellular"]
 
 # Scheduler Types
-SCHEDULERS_TO_TEST = ["DeadlineFIFO_Downloader", "AcornScheduler"]
+SCHEDULERS_TO_TEST = ["DeadlineFIFO_Downloader", "StandardLRU_Prefetcher", "AcornScheduler"]
 
 # Ablation Study Configurations
 ABLATION_CONFIGS = {
@@ -207,11 +207,11 @@ class BAP_Simulator:
             raise ValueError("Unknown network profile")
 
     def _define_nightly_wifi_trace(self):
-        """Stable but time-limited Wi-Fi. Reduced window for realistic differences."""
+        """Stable but time-limited Wi-Fi. Very short window for realistic differences."""
         trace = []
         for day in range(5):
             for hour in range(24):
-                if 2 <= hour < 3.5:  # Reduced to 1.5 hours at 0.4 Mbps
+                if 2 <= hour < 2.5:  # Very short 30-minute window at 0.4 Mbps
                     # Add some randomness to make results vary
                     bandwidth = 400 * 1024 + random.randint(-50, 50) * 1024
                     trace.append((max(200 * 1024, bandwidth), "wifi"))
@@ -220,14 +220,14 @@ class BAP_Simulator:
         return trace
 
     def _define_spotty_cellular_trace(self):
-        """Erratic, low-bandwidth cellular."""
+        """Erratic, low-bandwidth cellular with very limited availability."""
         trace = []
         for day in range(5):
             for hour in range(24):
-                if 8 <= hour <= 22 and random.random() < 0.15:  # Very low probability
-                    # Very low bandwidth
-                    bandwidth = 8 * 1024 + random.randint(-2, 2) * 1024
-                    trace.append((max(4 * 1024, bandwidth), "cellular"))
+                if 8 <= hour <= 22 and random.random() < 0.05:  # Very low probability
+                    # Very low bandwidth - much lower than WiFi
+                    bandwidth = 4 * 1024 + random.randint(-1, 1) * 1024
+                    trace.append((max(2 * 1024, bandwidth), "cellular"))
                 else:
                     trace.append((0, "none"))
         return trace
@@ -266,6 +266,10 @@ class BAP_Simulator:
 
         if scheduler_type == "AcornScheduler":
             downloaded_chunks = set()
+        elif scheduler_type == "StandardLRU_Prefetcher":
+            # LRU cache with whole-asset, deadline-ordered prefetching
+            lru_cache = []
+            remaining_bytes = {a["id"]: a["size"] for a in self.assets}
         else:  # File-granular baselines
             remaining_bytes = {a["id"]: a["size"] for a in self.assets}
 
@@ -277,7 +281,7 @@ class BAP_Simulator:
             if scheduler_type == "AcornScheduler":
                 # Chunk-granular download logic
                 net_factor = (
-                    1.0 if net_type == "wifi" else 0.1
+                    1.0 if net_type == "wifi" else 0.01
                 )  # Much lower factor for cellular
                 bw = bandwidth_this_hour
                 while bw > self.avg_chunk_size:
@@ -310,6 +314,28 @@ class BAP_Simulator:
                             (best_asset["id"], hour, self.avg_chunk_size)
                         )
                         bw -= self.avg_chunk_size
+
+            elif scheduler_type == "StandardLRU_Prefetcher":
+                # LRU cache with deadline-ordered prefetching
+                bw = bandwidth_this_hour
+                # Sort assets by deadline for LRU prefetching
+                for asset in assets_by_deadline:
+                    if remaining_bytes[asset["id"]] > 0 and bw > 0:
+                        # Check if asset is in LRU cache (simplified: just check if downloaded)
+                        if asset["id"] not in lru_cache:
+                            lru_cache.append(asset["id"])
+                        else:
+                            # Move to end (most recently used)
+                            lru_cache.remove(asset["id"])
+                            lru_cache.append(asset["id"])
+                        
+                        take = min(remaining_bytes[asset["id"]], bw)
+                        remaining_bytes[asset["id"]] -= take
+                        bytes_transferred += take
+                        download_log.append((asset["id"], hour, take))
+                        bw -= take
+                        if bw <= 0:
+                            break
 
             else:  # File-granular download logic for baselines
                 bw = bandwidth_this_hour

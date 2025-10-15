@@ -13,6 +13,9 @@ lint:
 test:
 	pytest -q
 
+test-units:
+	pytest tests/test_units.py -q
+
 run:
 	python simulation_harness.py
 

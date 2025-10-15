@@ -7,15 +7,15 @@ A gold-standard research simulation system for educational technology, implement
 This project provides a complete, runnable simulation of the core components described in the paper "Deadline-Aware Prefetch and Tamper-Evident Offline Exams for Low-Connectivity Learning." The system includes:
 
 - **BAP (Bandwidth-Aware Packaging)**: Intelligent content prefetching with deadline awareness
-- **OAEC (Offline Authentication and Event Chain)**: Tamper-evident exam authentication
+- **OAEC (Offline Assessment & Evidence Chain)**: Tamper-evident exam authentication
 - **CAG (Curriculum Audit and Gap)**: Automated curriculum coverage analysis
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.7+
-- Windows PowerShell (for Makefile commands)
+- Python 3.11+
+- Cross-platform support (Windows PowerShell, Linux/macOS bash)
 
 ### Setup
 
@@ -31,8 +31,15 @@ This project provides a complete, runnable simulation of the core components des
    ```
 
 3. **Activate the virtual environment**:
+   
+   **POSIX (Linux/macOS)**:
    ```bash
-   venv\Scripts\activate
+   source .venv/bin/activate
+   ```
+   
+   **Windows PowerShell**:
+   ```powershell
+   .venv\Scripts\Activate.ps1
    ```
 
 ### Running the Pipeline
@@ -63,7 +70,7 @@ make all
 ## Project Structure
 
 ```
-acorn-edu-simulation/
+ACORN-Edu/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml              # Continuous Integration
@@ -72,34 +79,53 @@ acorn-edu-simulation/
 ├── pyproject.toml             # Black formatter configuration
 ├── README.md                   # This file
 ├── requirements.txt           # Python dependencies
-├── src/
-│   ├── __init__.py
-│   ├── simulation_harness.py   # Core simulation logic
-│   ├── analyze_results.py      # Results analysis
-│   └── config.py               # Centralized configuration
-└── tests/
-    └── test_simulation.py      # Unit tests
+├── simulation_harness.py      # Core simulation logic
+├── scripts/
+│   └── create_plots.py        # Plot generation
+├── tests/
+│   ├── test_pipeline.py       # Pipeline tests
+│   └── test_oaec.py          # OAEC tests
+├── data/                      # Output data (CSV files)
+└── figures/                   # Output figures (PNG files)
 ```
 
 ## Configuration
 
-All simulation parameters are centralized in `src/config.py`:
+All simulation parameters are defined in `simulation_harness.py`:
 
-- **Simulation Parameters**: Number of runs, random seeds
+- **Simulation Parameters**: N=30 trials, random seeds, 95% Student-t confidence intervals
 - **Asset Definitions**: Course content with deadlines and reuse scores
 - **Network Profiles**: Wi-Fi and cellular connectivity patterns
-- **Scheduler Configurations**: BAP algorithm parameters
+- **Scheduler Configurations**: AcornScheduler algorithm parameters
 - **Ablation Study**: Component importance analysis
 
 ## Output
 
 The simulation generates:
 
-- **Data Files**: CSV results with statistical analysis
-- **Figures**: Performance comparison charts
+- **Data Files**: CSV results with statistical analysis (KB units, 95% Student-t CIs)
+- **Figures**: Performance comparison charts (300 DPI, ≥12pt fonts)
 - **Metadata**: Run parameters and timestamps
 
-Output is saved to `./output/data/` and `./output/figures/`.
+### Statistics & Units
+
+- **Units**: All size metrics in KB only (column names end with `_kb`)
+- **Statistics**: N=30 trials with two-sided 95% Student-t confidence intervals
+- **Output Location**: `data/` and `figures/` directories
+
+### Expected Output Files
+
+**Data Files:**
+- `data/bap_network_scenario_results.csv` - Network scenario results
+- `data/bap_ablation_study_results.csv` - Ablation study results
+- `data/oaec_confusion_matrix.csv` - OAEC tamper detection results
+- `data/run_metadata.json` - Run parameters and version info
+
+**Figures:**
+- `figures/network_bytes.png` - Network bandwidth comparison
+- `figures/network_hitrate.png` - Network hit rate comparison
+- `figures/ablation_hitrate.png` - Ablation hit rate study
+- `figures/ablation_bytes.png` - Ablation bandwidth study
 
 ## Development
 
@@ -114,9 +140,9 @@ The project enforces high code quality standards:
 
 ### Adding New Features
 
-1. Update configuration in `src/config.py`
-2. Implement logic in `src/simulation_harness.py`
-3. Add tests in `tests/test_simulation.py`
+1. Update configuration in `simulation_harness.py`
+2. Implement logic in `simulation_harness.py`
+3. Add tests in `tests/`
 4. Update documentation
 
 ### Running Tests
@@ -126,7 +152,10 @@ The project enforces high code quality standards:
 make test
 
 # Run with coverage
-venv\Scripts\activate && python -m pytest tests/ -v --cov=src
+# POSIX:
+source .venv/bin/activate && python -m pytest tests/ -v --cov=.
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1; python -m pytest tests/ -v --cov=.
 ```
 
 ## Research Applications
