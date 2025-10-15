@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
+from matplotlib.ticker import StrMethodFormatter
 plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
 # unified errorbar styling (consistent across all figures)
 ERR_KW = dict(capsize=6)
@@ -239,6 +240,7 @@ def run_all():
         plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
         plt.xticks(x, sub["policy"], rotation=0)
         plt.ylabel("KB transferred")
+        plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         plt.title(f"Bytes (KB) – {sc}")
         plt.tight_layout()
         plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
@@ -266,6 +268,7 @@ def run_all():
     plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
     plt.xticks(x, xt, rotation=0, ha="center")
     plt.ylabel("KB transferred")
+    plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     plt.gcf().subplots_adjust(bottom=0.25)  # prevent label overlap
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI)
@@ -315,6 +318,7 @@ def run_all():
     plt.bar(x, abl_bytes.loc[abl_order,"mean"], yerr=abl_bytes.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#ffb3b3")
     plt.xticks(x, labels, rotation=0, ha="center")
     plt.ylabel("Bytes Transferred (KB)")
+    plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     plt.title("ACORN-Edu Ablation: Bandwidth")
     plt.gcf().subplots_adjust(bottom=0.30)
     plt.tight_layout()
