@@ -490,8 +490,11 @@ def run_all():
         ax.set_ylabel("KB transferred")
         ax.set_title(f"KB transferred — {label_scenario('nightly_wifi')}")
         max_val = max(sub["mean_bytes_kb"])
+        # Add more spacing and adjust y-axis limits
+        label_height = max_val * 0.08
+        ax.set_ylim(0, max_val + label_height)
         for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + label_height*0.3,
                    f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"ablation_kb_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
         plt.close()
@@ -510,8 +513,11 @@ def run_all():
         ax.set_ylabel("KB transferred")
         ax.set_title(f"KB transferred — {label_scenario('spotty_cellular')}")
         max_val = max(sub["mean_bytes_kb"])
+        # Add more spacing and adjust y-axis limits
+        label_height = max_val * 0.08
+        ax.set_ylim(0, max_val + label_height)
         for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + label_height*0.3,
                    f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"ablation_kb_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
         plt.close()
