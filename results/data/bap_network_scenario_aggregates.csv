@@ -1,0 +1,5 @@
+scenario,policy,mean_bytes_kb,mean_hit_rate,n_trials,ci95_bytes_kb,ci95_hit_rate
+nightly_wifi,LRU_whole,943996.6,0.5,30,1759.7,0.1
+nightly_wifi,acorn,925686.9,0.8,30,13320.8,0.1
+spotty_cellular,LRU_whole,24995.7,0.0,30,1271.7,0.0
+spotty_cellular,acorn,25211.2,0.1,30,1286.3,0.0

@@ -14,10 +14,26 @@ from scipy import stats
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 
-# Import the new slack-aware priority function
-from acorn.scheduler_priority import compute_acorn_scores, Candidate
-# Import human-friendly labels
-from utils.labels import label_scenario, label_policy, label_ablation
+# Human-friendly labels
+SCENARIO_LABEL = {
+    "nightly_wifi": "Nightly Wi-Fi Window",
+    "spotty_cellular": "Bursty Cellular",
+}
+POLICY_LABEL = {
+    "acorn": "Acorn (Slack-Aware)",
+    "LRU_whole": "Whole-File LRU",
+}
+ABLATION_LABEL = {
+    "full": "Full (α,β,γ,δ)",
+    "alpha0": "No-Deadline (α=0)",
+    "beta0":  "No-Reuse (β=0)",
+    "gamma0": "No-Size (γ=0)",
+    "delta0": "No-Connectivity (δ=0)",
+}
+
+def label_scenario(x: str) -> str: return SCENARIO_LABEL.get(x, x)
+def label_policy(x: str) -> str:   return POLICY_LABEL.get(x, x)
+def label_ablation(x: str) -> str: return ABLATION_LABEL.get(x, x)
 plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
 # unified errorbar styling (consistent across all figures)
 ERR_KW = dict(capsize=6)
@@ -26,8 +42,14 @@ BAR_EDGE_KW = dict(edgecolor="black", linewidth=0.6)
 # -------------------- CONFIG --------------------
 RNG_SEED_BASE = 1337
 N_TRIALS = 30
-OUT_DATA = Path("data"); OUT_FIGS = Path("figures")
-OUT_DATA.mkdir(exist_ok=True); OUT_FIGS.mkdir(exist_ok=True)
+OUT_DIR = Path("results")
+OUT_DATA = OUT_DIR / "data"
+OUT_FIGS = OUT_DIR / "figures"
+OUT_ABLATION = OUT_DIR / "ablation"
+OUT_DIR.mkdir(exist_ok=True)
+OUT_DATA.mkdir(exist_ok=True)
+OUT_FIGS.mkdir(exist_ok=True)
+OUT_ABLATION.mkdir(exist_ok=True)
 
 # policy weights (defaults) - normalized weights for slack-aware scheduler
 ALPHA = 0.35   # slack term (deadline urgency)
@@ -58,6 +80,87 @@ class Asset:
     size_kb: float
     deadline_s: float
     reuse_score: float  # [0,1]
+
+@dataclass
+class Candidate:
+    size_kb: float
+    deadline_ts: float
+    reuse_score: float
+
+def _norm01(x: np.ndarray) -> np.ndarray:
+    x = x.astype(float)
+    lo, hi = np.nanmin(x), np.nanmax(x)
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi - lo < 1e-9:
+        return np.zeros_like(x, dtype=float)
+    return (x - lo) / (hi - lo)
+
+def compute_acorn_scores(
+    candidates: Sequence[Candidate],
+    *,
+    now_ts: float,
+    next_window_sec: float,
+    predicted_throughput_kBps: float,   # MUST be KB/s
+    # NEW default weights: (alpha, beta, gamma, delta)
+    weights: Tuple[float, float, float, float] = (0.30, 0.30, 0.30, 0.10),
+    ablation: Optional[str] = None,
+):
+    """
+    Scores higher = schedule earlier. All component terms are in [0,1], higher-is-better.
+    alpha: deadline/slack, beta: reuse, gamma: inverse size, delta: connectivity/finishability
+    """
+    n = len(candidates)
+    if n == 0:
+        return np.array([]), np.array([])
+
+    size_kb   = np.array([c.size_kb for c in candidates], dtype=float)
+    reuse_raw = np.array([c.reuse_score for c in candidates], dtype=float)
+    deadlines = np.array([c.deadline_ts for c in candidates], dtype=float)
+
+    # ---- Robustness: enforce KB/s and sane floor ----
+    th = float(predicted_throughput_kBps)
+    if th <= 0:
+        th = 1e-6  # guard, not expected
+    # Predicted download time for this window's link
+    dl_time_sec = size_kb / th
+
+    # ---- Slack with CAP + DEAD-ZONE (prevents over-rewarding razor-thin slack) ----
+    # slack_sec = time left after finishing download; negative => impossible
+    slack_sec = (deadlines - now_ts) - dl_time_sec
+    slack_nonneg = np.clip(slack_sec, 0.0, None)
+    # Cap slack to the window length so "very early" items don't crowd out urgent-but-feasible
+    S_capped = np.clip(slack_nonneg, 0.0, next_window_sec)
+    # Dead-zone: treat slack beyond 25% of the window as equivalent (saturates the benefit)
+    deadzone = 0.25 * next_window_sec
+    S_eff = np.clip(S_capped, 0.0, deadzone)
+    slack_term = 1.0 - _norm01(S_eff)  # smaller (but nonnegative) slack ⇒ higher priority
+
+    # ---- Finishability-oriented connectivity term (bounded, monotone, per-item) ----
+    # Fraction of the upcoming window needed to fetch this item at predicted throughput.
+    # 0 => trivial to finish; 1 => exactly fills the window; >1 will be gated as infeasible anyway.
+    window_capacity_kb = th * next_window_sec
+    frac_of_window = np.clip(size_kb / (window_capacity_kb + 1e-9), 0.0, 1.0)
+    conn_term = 1.0 - _norm01(frac_of_window)  # higher means easier to finish within window
+
+    # ---- Other terms ----
+    size_term  = 1.0 - _norm01(size_kb)         # smaller is better
+    reuse_term = _norm01(reuse_raw)             # higher reuse is better
+
+    # ---- Hard feasibility gate (kept) ----
+    feasible = (slack_sec >= 0.0) & (dl_time_sec <= next_window_sec)
+
+    alpha, beta, gamma, delta = weights
+    if ablation == "alpha0": alpha = 0.0
+    if ablation == "beta0":  beta  = 0.0
+    if ablation == "gamma0": gamma = 0.0
+    if ablation == "delta0": delta = 0.0
+
+    # Weighted sum (interpretable, low-compute)
+    scores = alpha*slack_term + beta*reuse_term + gamma*size_term + delta*conn_term
+    scores = np.where(feasible, scores, 0.0)
+
+    # Stable tie-breakers: higher reuse, then smaller size
+    sort_idx = np.lexsort((size_kb, -reuse_term, scores))
+    return scores, sort_idx
 
 def gen_assets(rng: random.Random) -> List[Asset]:
     assets = []
@@ -263,14 +366,124 @@ def run_all():
 
     # -------- Generate final figures --------
     # First, compute ablation deltas
-    from scripts.compute_ablation_deltas import compute_ablation_deltas
-    compute_ablation_deltas(
-        OUT_DATA/"bap_ablation_study_aggregates.csv",
-        "results/ablation/ablation_summary_by_scenario.csv"
-    )
+    def compute_ablation_deltas():
+        agg = pd.read_csv(OUT_DATA/"bap_ablation_study_aggregates.csv")
+        out = []
+        for scen, grp in agg.groupby("scenario"):
+            full = grp[grp["ablation"] == "full"].iloc[0]
+            for _, r in grp.iterrows():
+                out.append({
+                    "scenario": scen,
+                    "ablation": r["ablation"],
+                    "mean_bytes_kb": r["mean_bytes_kb"],
+                    "ci95_bytes_kb": r["ci95_bytes_kb"],
+                    "mean_hit_rate": r["mean_hit_rate"],
+                    "ci95_hit_rate": r["ci95_hit_rate"],
+                    "delta_kb_pct": 100.0 * (r["mean_bytes_kb"] - full["mean_bytes_kb"]) / full["mean_bytes_kb"],
+                    "delta_hit_pp": 100.0 * (r["mean_hit_rate"] - full["mean_hit_rate"]),
+                })
+        pd.DataFrame(out).to_csv(OUT_ABLATION/"ablation_summary_by_scenario.csv", index=False)
     
-    # Generate the 4 final figures
-    from scripts.generate_final_figures import create_final_figures
+    compute_ablation_deltas()
+    
+    # Generate the 4 final figures with improved styling
+    def create_final_figures():
+        # Load data
+        policy_agg = pd.read_csv(OUT_DATA/"bap_network_scenario_aggregates.csv")
+        ablation_agg = pd.read_csv(OUT_ABLATION/"ablation_summary_by_scenario.csv")
+        
+        # Add labels
+        policy_agg["scenario_label"] = policy_agg["scenario"].map(label_scenario)
+        policy_agg["policy_label"] = policy_agg["policy"].map(label_policy)
+        ablation_agg["scenario_label"] = ablation_agg["scenario"].map(label_scenario)
+        ablation_agg["ablation_label"] = ablation_agg["ablation"].map(label_ablation)
+        
+        # 1. BAP KB transferred
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+        
+        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
+            sub = policy_agg[policy_agg["scenario"] == scenario]
+            x = np.arange(len(sub))
+            bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+            ax.set_xticks(x)
+            ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+            ax.set_ylabel("KB transferred")
+            ax.set_title(f"KB transferred — {label_scenario(scenario)}")
+            # Add value labels above bars
+            for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
+                       f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+        
+        plt.savefig(OUT_FIGS/"final_bap_kb.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 2. BAP Hit rate
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+        
+        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
+            sub = policy_agg[policy_agg["scenario"] == scenario]
+            x = np.arange(len(sub))
+            bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+            ax.set_xticks(x)
+            ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+            ax.set_ylabel("Prefetch hit-rate (%)")
+            ax.set_ylim(0, 100)
+            ax.set_title(f"Prefetch hit-rate (%) — {label_scenario(scenario)}")
+            # Add value labels above bars
+            for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+                       f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        
+        plt.savefig(OUT_FIGS/"final_bap_hit.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 3. Ablation KB transferred
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+        
+        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
+            sub = ablation_agg[ablation_agg["scenario"] == scenario]
+            # Order: full, alpha0, beta0, gamma0, delta0
+            order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+            sub = sub.set_index("ablation").loc[order].reset_index()
+            x = np.arange(len(sub))
+            bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+            ax.set_xticks(x)
+            ax.set_xticklabels(sub["ablation_label"], rotation=45, ha="right")
+            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+            ax.set_ylabel("KB transferred")
+            ax.set_title(f"KB transferred — {label_scenario(scenario)}")
+            # Add value labels above bars
+            for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
+                       f"{val:,.0f}", ha="center", va="bottom", fontsize=9)
+        
+        plt.savefig(OUT_FIGS/"final_ablation_kb.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 4. Ablation Hit rate
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+        
+        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
+            sub = ablation_agg[ablation_agg["scenario"] == scenario]
+            # Order: full, alpha0, beta0, gamma0, delta0
+            order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+            sub = sub.set_index("ablation").loc[order].reset_index()
+            x = np.arange(len(sub))
+            bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+            ax.set_xticks(x)
+            ax.set_xticklabels(sub["ablation_label"], rotation=45, ha="right")
+            ax.set_ylabel("Prefetch hit-rate (%)")
+            ax.set_ylim(0, 100)
+            ax.set_title(f"Prefetch hit-rate (%) — {label_scenario(scenario)}")
+            # Add value labels above bars
+            for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+                       f"{val:.0f}%", ha="center", va="bottom", fontsize=9)
+        
+        plt.savefig(OUT_FIGS/"final_ablation_hit.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+    
     create_final_figures()
 
     # metadata
@@ -301,10 +514,10 @@ def verify():
         OUT_DATA/"bap_ablation_study_aggregates.csv",
     ]
     req_figs = [
-        Path("results/figures/final_bap_kb.png"),
-        Path("results/figures/final_bap_hit.png"),
-        Path("results/figures/final_ablation_kb.png"),
-        Path("results/figures/final_ablation_hit.png"),
+        OUT_FIGS/"final_bap_kb.png",
+        OUT_FIGS/"final_bap_hit.png",
+        OUT_FIGS/"final_ablation_kb.png",
+        OUT_FIGS/"final_ablation_hit.png",
     ]
     miss = [str(p) for p in req_csvs+req_figs if not p.exists()]
     if miss: raise SystemExit("Missing artifacts:\n- "+"\n- ".join(miss))
