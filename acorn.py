@@ -6,13 +6,18 @@ from __future__ import annotations
 import json, math, os, random, time, subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
+
+# Import the new slack-aware priority function
+from acorn.scheduler_priority import compute_acorn_scores, Candidate
+# Import human-friendly labels
+from utils.labels import label_scenario, label_policy, label_ablation
 plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
 # unified errorbar styling (consistent across all figures)
 ERR_KW = dict(capsize=6)
@@ -24,11 +29,11 @@ N_TRIALS = 30
 OUT_DATA = Path("data"); OUT_FIGS = Path("figures")
 OUT_DATA.mkdir(exist_ok=True); OUT_FIGS.mkdir(exist_ok=True)
 
-# policy weights (defaults)
-ALPHA = 1.0   # deadline urgency
-BETA  = 1.0   # reuse score
-GAMMA = 1.0   # inverse size
-DELTA = 1.0   # predicted availability
+# policy weights (defaults) - normalized weights for slack-aware scheduler
+ALPHA = 0.35   # slack term (deadline urgency)
+BETA  = 0.25   # reuse score
+GAMMA = 0.20   # inverse size
+DELTA = 0.20   # predicted availability
 
 # scenarios (simple but meaningfully different)
 SCENARIOS = {
@@ -82,14 +87,39 @@ def availability_predictor(windows: List[Tuple[int,int,int]], t: int) -> float:
     return 0.1
 
 # -------------------- POLICIES --------------------
-def prio_acorn(asset: Asset, t: int, windows, w) -> float:
-    eps = 1.0
-    urgency = 1.0 / max(asset.deadline_s - t, eps)
-    inv_size = 1.0 / max(asset.size_kb, 1.0)
-    pavail = availability_predictor(windows, t)
-    return w["alpha"]*urgency + w["beta"]*asset.reuse_score + w["gamma"]*inv_size + w["delta"]*pavail
+def prio_acorn(asset: Asset, t: int, windows, w, ablation: Optional[str] = None) -> float:
+    # Use the new slack-aware, normalized priority function
+    candidates = [Candidate(asset.size_kb, asset.deadline_s, asset.reuse_score)]
+    
+    # Get current window info for throughput prediction
+    current_window = None
+    for s, e, kbps in windows:
+        if s <= t <= e:
+            current_window = (s, e, kbps)
+            break
+    
+    if current_window is None:
+        # No current window, use minimal throughput
+        predicted_throughput_kBps = 1.0
+        next_window_sec = 3600  # 1 hour fallback
+    else:
+        s, e, kbps = current_window
+        predicted_throughput_kBps = kbps / 8.0  # Convert kbps to KB/s
+        next_window_sec = e - t
+    
+    weights = (w["alpha"], w["beta"], w["gamma"], w["delta"])
+    scores, _ = compute_acorn_scores(
+        candidates,
+        now_ts=t,
+        next_window_sec=next_window_sec,
+        predicted_throughput_kBps=predicted_throughput_kBps,
+        weights=weights,
+        ablation=ablation
+    )
+    
+    return scores[0] if len(scores) > 0 else 0.0
 
-def policy_acorn(assets: List[Asset], windows, rng: random.Random, weights) -> Tuple[float,float]:
+def policy_acorn(assets: List[Asset], windows, rng: random.Random, weights, ablation: Optional[str] = None) -> Tuple[float,float]:
     # returns (bytes_kb, hit_rate)
     t = 0; downloaded = set(); bytes_kb = 0.0; hits = 0
     for s,e,kbps in windows:
@@ -97,13 +127,13 @@ def policy_acorn(assets: List[Asset], windows, rng: random.Random, weights) -> T
         while t < e and len(downloaded) < len(assets):
             remaining = [a for a in assets if a.aid not in downloaded]
             if not remaining: break
-            best = max(remaining, key=lambda a: prio_acorn(a, t, windows, weights))
-            budget_kb = (e - t) * (kbps)  # kb/s * s = kb
+            best = max(remaining, key=lambda a: prio_acorn(a, t, windows, weights, ablation))
+            budget_kb = (e - t) * (kbps / 8.0)  # Convert kbps to KB/s
             if budget_kb <= 0: break
             # crude delta-sync effect: less to transfer when reuse_score is high
             use_kb = min(budget_kb, best.size_kb * (1.0 - 0.4*best.reuse_score))
             bytes_kb += use_kb
-            t += max(1, int(use_kb / max(kbps,1)))
+            t += max(1, int(use_kb / max(kbps/8.0,1)))  # Convert kbps to KB/s
             downloaded.add(best.aid)
             if t <= best.deadline_s: hits += 1
     hit_rate = hits / max(1,len(assets))
@@ -123,12 +153,12 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
                 if t <= a.deadline_s: hits += 1
                 qi += 1
                 continue
-            budget_kb = (e - t) * (kbps)
+            budget_kb = (e - t) * (kbps / 8.0)  # Convert kbps to KB/s
             if budget_kb <= 0: break
             need_kb = a.size_kb
             use_kb = min(budget_kb, need_kb)
             bytes_kb += use_kb
-            t += max(1, int(use_kb / max(kbps,1)))
+            t += max(1, int(use_kb / max(kbps/8.0,1)))  # Convert kbps to KB/s
             if use_kb >= need_kb:
                 cache.append(a.aid)
                 if len(cache) > CACHE_CAP: cache.pop(0)
@@ -141,17 +171,17 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
     return bytes_kb, hit_rate
 
 # -------------------- RUNNERS --------------------
-def run_trial(scenario_name: str, policy: str, weights: Dict[str,float], trial_seed: int) -> Dict:
+def run_trial(scenario_name: str, policy: str, weights: Dict[str,float], trial_seed: int, ablation: Optional[str] = None) -> Dict:
     rng = random.Random(trial_seed)
     assets = gen_assets(rng)
     windows = gen_windows(SCENARIOS[scenario_name], rng)
     if policy == "acorn":
-        bkb, hr = policy_acorn(assets, windows, rng, weights)
+        bkb, hr = policy_acorn(assets, windows, rng, weights, ablation)
     elif policy == "LRU_whole":
         bkb, hr = policy_lru_whole(assets, windows, rng)
     else:
         raise ValueError(policy)
-    return dict(scenario=scenario_name, policy=policy, trial=trial_seed, bytes_kb=bkb, hit_rate=hr, seed=trial_seed)
+    return dict(scenario=scenario_name, policy=policy, trial=trial_seed, bytes_kb=bkb, hit_rate=hr, seed=trial_seed, ablation=ablation)
 
 def t_ci(series: np.ndarray, alpha=0.05) -> float:
     n = len(series)
@@ -171,13 +201,13 @@ def run_all():
             except OSError:
                 pass
     
-    # base + ablations
+    # base + ablations - use normalized weights
     ablations = {
         "full":   dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),
-        "alpha0": dict(alpha=0.0,   beta=BETA, gamma=GAMMA, delta=DELTA),
-        "beta0":  dict(alpha=ALPHA, beta=0.0,  gamma=GAMMA, delta=DELTA),
-        "gamma0": dict(alpha=ALPHA, beta=BETA, gamma=0.0,   delta=DELTA),
-        "delta0": dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=0.0),
+        "alpha0": dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),  # Will be handled by ablation parameter
+        "beta0":  dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),  # Will be handled by ablation parameter
+        "gamma0": dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),  # Will be handled by ablation parameter
+        "delta0": dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA),  # Will be handled by ablation parameter
     }
     rows, ablrows = [], []
     seeds = [RNG_SEED_BASE + i for i in range(N_TRIALS)]
@@ -191,8 +221,7 @@ def run_all():
             # create unique seeds for this ablation by adding a hash of the ablation name
             abl_seeds = [s + hash(abl) % 10000 for s in seeds]
             for s in abl_seeds:
-                r = run_trial(scenario, "acorn", w, s)
-                r.update(ablation=abl)
+                r = run_trial(scenario, "acorn", w, s, ablation=abl)
                 ablrows.append(r)
 
     df = pd.DataFrame(rows)
@@ -233,15 +262,19 @@ def run_all():
     aggA.to_csv(OUT_DATA/"bap_ablation_study_aggregates.csv", index=False)
 
     # -------- figures (one metric per image) --------
+    # Add human-friendly labels to aggregates
+    agg["scenario_label"] = agg["scenario"].map(label_scenario)
+    agg["policy_label"] = agg["policy"].map(label_policy)
+    
     plt.figure(figsize=(6,4))
     for sc in SCENARIOS.keys():
         sub = agg[agg["scenario"]==sc]
         x = np.arange(len(sub))
         plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
-        plt.xticks(x, sub["policy"], rotation=0)
+        plt.xticks(x, sub["policy_label"], rotation=0)
         plt.ylabel("KB transferred")
         plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-        plt.title(f"Bytes (KB) – {sc}")
+        plt.title(f"KB transferred – {label_scenario(sc)}")
         plt.tight_layout()
         plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
         plt.close()
@@ -252,9 +285,9 @@ def run_all():
         sub = agg[agg["scenario"]==sc]
         x = np.arange(len(sub))
         plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
-        plt.xticks(x, sub["policy"], rotation=0)
-        plt.ylabel("Hit rate (%)")
-        plt.title(f"Hit rate (%) – {sc}")
+        plt.xticks(x, sub["policy_label"], rotation=0)
+        plt.ylabel("Prefetch hit-rate (%)")
+        plt.title(f"Prefetch hit-rate (%) – {label_scenario(sc)}")
         plt.tight_layout()
         plt.savefig(OUT_FIGS/f"bap_hit_rate_comparison_{sc}.png", dpi=DPI)
         plt.close()
@@ -262,7 +295,7 @@ def run_all():
     # default-named pair for quick checks (bigger canvas + two-line ticks)
     sub = agg.sort_values(["scenario","policy"]).reset_index(drop=True)
     x = np.arange(len(sub))
-    xt = [f"{sc}\n{pol}" for sc, pol in zip(sub["scenario"], sub["policy"])]
+    xt = [f"{label_scenario(sc)}\n{label_policy(pol)}" for sc, pol in zip(sub["scenario"], sub["policy"])]
 
     plt.figure(figsize=(10, 5))
     plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
@@ -277,7 +310,7 @@ def run_all():
     plt.figure(figsize=(10, 5))
     plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
     plt.xticks(x, xt, rotation=0, ha="center")
-    plt.ylabel("Hit rate (%)")
+    plt.ylabel("Prefetch hit-rate (%)")
     plt.gcf().subplots_adjust(bottom=0.25)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI)
@@ -294,21 +327,14 @@ def run_all():
     abl_hit   = dfa.groupby("ablation")["hit_rate"].apply(_agg_with_ci).unstack()
     # Pretty order + labels
     abl_order = ["full","alpha0","beta0","gamma0","delta0"]
-    pretty = {
-        "full":"Full AcornScheduler",
-        "alpha0":"No Deadline Priority",
-        "beta0":"No Reuse Priority",
-        "gamma0":"No Size Priority",
-        "delta0":"No Network Priority",
-    }
     x = np.arange(len(abl_order))
-    labels = [pretty[a] for a in abl_order]
+    labels = [label_ablation(a) for a in abl_order]
 
     plt.figure(figsize=(12,5))
     plt.bar(x, 100*abl_hit.loc[abl_order,"mean"], yerr=100*abl_hit.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#9bd0ff")
     plt.xticks(x, labels, rotation=0, ha="center")
-    plt.ylabel("Prefetch Hit Rate (%)")
-    plt.title("ACORN-Edu Ablation: Hit Rate")
+    plt.ylabel("Prefetch hit-rate (%)")
+    plt.title("Ablations (Acorn): Prefetch Hit-Rate (%)")
     plt.gcf().subplots_adjust(bottom=0.30)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"ablation_hit_rate.png", dpi=DPI)
@@ -317,9 +343,9 @@ def run_all():
     plt.figure(figsize=(12,5))
     plt.bar(x, abl_bytes.loc[abl_order,"mean"], yerr=abl_bytes.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#ffb3b3")
     plt.xticks(x, labels, rotation=0, ha="center")
-    plt.ylabel("Bytes Transferred (KB)")
+    plt.ylabel("KB transferred")
     plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-    plt.title("ACORN-Edu Ablation: Bandwidth")
+    plt.title("Ablations (Acorn): KB transferred")
     plt.gcf().subplots_adjust(bottom=0.30)
     plt.tight_layout()
     plt.savefig(OUT_FIGS/"ablation_bytes.png", dpi=DPI)
@@ -334,12 +360,13 @@ def run_all():
             return None
 
     (OUT_DATA/"run_metadata.json").write_text(json.dumps({
-        "seed_base": RNG_SEED_BASE,
+        "commit": _git_rev(),
+        "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "n_trials": N_TRIALS,
-        "timestamp": int(time.time()),
-        "git_rev": _git_rev(),
+        "seed_base": RNG_SEED_BASE,
+        "scenarios": list(SCENARIOS.keys()),
         "policies": ["acorn","LRU_whole"],
-        "ablations": ["full","alpha0","beta0","gamma0","delta0"]
+        "ablations": ["alpha0","beta0","gamma0","delta0"]
     }, indent=2))
 
 # -------------------- VERIFY --------------------
@@ -403,13 +430,51 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="ACORN-Edu single-file harness")
     ap.add_argument("--trials", type=int, default=N_TRIALS, help="override number of trials (default: 30)")
-    ap.add_argument("--seed", type=int, default=RNG_SEED_BASE, help="override base RNG seed (default: 1337)")
+    ap.add_argument("--seed-base", type=int, default=RNG_SEED_BASE, help="override base RNG seed (default: 1337)")
+    ap.add_argument("--policy", choices=["acorn", "LRU_whole"], default="acorn", help="policy to run")
+    ap.add_argument("--scenario", choices=list(SCENARIOS.keys()), help="scenario to run")
+    ap.add_argument("--alpha0", action="store_true", help="ablation: remove deadline term")
+    ap.add_argument("--beta0", action="store_true", help="ablation: remove reuse term")
+    ap.add_argument("--gamma0", action="store_true", help="ablation: remove size term")
+    ap.add_argument("--delta0", action="store_true", help="ablation: remove network term")
     args = ap.parse_args()
+
+    # Check for mutually exclusive ablation flags
+    ablation_flags = [args.alpha0, args.beta0, args.gamma0, args.delta0]
+    if sum(ablation_flags) > 1:
+        ap.error("Only one ablation flag can be specified at a time")
+    
+    # Determine ablation
+    ablation = None
+    if args.alpha0: ablation = "alpha0"
+    elif args.beta0: ablation = "beta0"
+    elif args.gamma0: ablation = "gamma0"
+    elif args.delta0: ablation = "delta0"
 
     # override globals for this run
     N_TRIALS = args.trials
-    RNG_SEED_BASE = args.seed
+    RNG_SEED_BASE = args.seed_base
 
-    run_all()
-    verify()
-    print("OK: data/*.csv + figures/*.png + run_metadata.json written (KB-only; 95% t-CIs)")
+    # If specific scenario/policy/ablation specified, run single trial
+    if args.scenario is not None:
+        if args.policy == "LRU_whole" and ablation is not None:
+            ap.error("LRU_whole policy does not support ablations")
+        
+        # Run single trial
+        rng = random.Random(RNG_SEED_BASE)
+        assets = gen_assets(rng)
+        windows = gen_windows(SCENARIOS[args.scenario], rng)
+        
+        if args.policy == "acorn":
+            weights = dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA)
+            bkb, hr = policy_acorn(assets, windows, rng, weights, ablation)
+        elif args.policy == "LRU_whole":
+            bkb, hr = policy_lru_whole(assets, windows, rng)
+        
+        print(f"Scenario: {args.scenario}, Policy: {args.policy}, Ablation: {ablation or 'none'}")
+        print(f"Bytes (KB): {bkb:.1f}, Hit Rate: {hr:.3f}")
+    else:
+        # Run full benchmark
+        run_all()
+        verify()
+        print("OK: data/*.csv + figures/*.png + run_metadata.json written (KB-only; 95% t-CIs)")
