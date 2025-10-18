@@ -439,7 +439,7 @@ def run_all():
         plt.close()
         
         # 3. Ablation KB transferred
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
         
         for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
             sub = ablation_agg[ablation_agg["scenario"] == scenario]
@@ -449,20 +449,33 @@ def run_all():
             x = np.arange(len(sub))
             bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
             ax.set_xticks(x)
-            ax.set_xticklabels(sub["ablation_label"], rotation=45, ha="right")
+            # Create two-line labels for better readability
+            labels = []
+            for label in sub["ablation_label"]:
+                if "(" in label and ")" in label:
+                    # Split at the first parenthesis for two-line labels
+                    parts = label.split("(", 1)
+                    if len(parts) == 2:
+                        labels.append(f"{parts[0].strip()}\n({parts[1]}")
+                    else:
+                        labels.append(label)
+                else:
+                    labels.append(label)
+            ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
             ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
             ax.set_ylabel("KB transferred")
             ax.set_title(f"KB transferred — {label_scenario(scenario)}")
-            # Add value labels above bars
+            # Add value labels above bars with more spacing
+            max_val = max(sub["mean_bytes_kb"])
             for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
-                       f"{val:,.0f}", ha="center", va="bottom", fontsize=9)
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
+                       f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
         
         plt.savefig(OUT_FIGS/"final_ablation_kb.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
         # 4. Ablation Hit rate
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
         
         for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
             sub = ablation_agg[ablation_agg["scenario"] == scenario]
@@ -472,14 +485,26 @@ def run_all():
             x = np.arange(len(sub))
             bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
             ax.set_xticks(x)
-            ax.set_xticklabels(sub["ablation_label"], rotation=45, ha="right")
+            # Create two-line labels for better readability
+            labels = []
+            for label in sub["ablation_label"]:
+                if "(" in label and ")" in label:
+                    # Split at the first parenthesis for two-line labels
+                    parts = label.split("(", 1)
+                    if len(parts) == 2:
+                        labels.append(f"{parts[0].strip()}\n({parts[1]}")
+                    else:
+                        labels.append(label)
+                else:
+                    labels.append(label)
+            ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
             ax.set_ylabel("Prefetch hit-rate (%)")
             ax.set_ylim(0, 100)
             ax.set_title(f"Prefetch hit-rate (%) — {label_scenario(scenario)}")
-            # Add value labels above bars
+            # Add value labels above bars with more spacing
             for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                       f"{val:.0f}%", ha="center", va="bottom", fontsize=9)
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 3,
+                       f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
         
         plt.savefig(OUT_FIGS/"final_ablation_hit.png", bbox_inches="tight", dpi=DPI)
         plt.close()

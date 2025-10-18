@@ -1,8 +1,8 @@
 {
-  "commit": "e458cbb",
-  "timestamp_utc": "2025-10-18T04:30:03Z",
-  "n_trials": 30,
-  "seed_base": 1337,
+  "commit": "ed35713",
+  "timestamp_utc": "2025-10-18T04:45:04Z",
+  "n_trials": 3,
+  "seed_base": 2025,
   "scenarios": [
     "nightly_wifi",
     "spotty_cellular"
