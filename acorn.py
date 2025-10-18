@@ -386,7 +386,7 @@ def run_all():
     
     compute_ablation_deltas()
     
-    # Generate the 4 final figures with improved styling
+    # Generate 8 individual figures for LaTeX paper submission
     def create_final_figures():
         # Load data
         policy_agg = pd.read_csv(OUT_DATA/"bap_network_scenario_aggregates.csv")
@@ -398,115 +398,160 @@ def run_all():
         ablation_agg["scenario_label"] = ablation_agg["scenario"].map(label_scenario)
         ablation_agg["ablation_label"] = ablation_agg["ablation"].map(label_ablation)
         
-        # 1. BAP KB transferred
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
-        
-        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
-            sub = policy_agg[policy_agg["scenario"] == scenario]
-            x = np.arange(len(sub))
-            bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
-            ax.set_xticks(x)
-            ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
-            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-            ax.set_ylabel("KB transferred")
-            ax.set_title(f"KB transferred — {label_scenario(scenario)}")
-            # Add value labels above bars
-            for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
-                       f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
-        
-        plt.savefig(OUT_FIGS/"final_bap_kb.png", bbox_inches="tight", dpi=DPI)
-        plt.close()
-        
-        # 2. BAP Hit rate
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
-        
-        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
-            sub = policy_agg[policy_agg["scenario"] == scenario]
-            x = np.arange(len(sub))
-            bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
-            ax.set_xticks(x)
-            ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
-            ax.set_ylabel("Prefetch hit-rate (%)")
-            ax.set_ylim(0, 100)
-            ax.set_title(f"Prefetch hit-rate (%) — {label_scenario(scenario)}")
-            # Add value labels above bars
-            for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                       f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
-        
-        plt.savefig(OUT_FIGS/"final_bap_hit.png", bbox_inches="tight", dpi=DPI)
-        plt.close()
-        
-        # 3. Ablation KB transferred
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
-        
-        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
-            sub = ablation_agg[ablation_agg["scenario"] == scenario]
-            # Order: full, alpha0, beta0, gamma0, delta0
-            order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
-            sub = sub.set_index("ablation").loc[order].reset_index()
-            x = np.arange(len(sub))
-            bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
-            ax.set_xticks(x)
-            # Create two-line labels for better readability
-            labels = []
-            for label in sub["ablation_label"]:
+        # Helper function to create two-line labels
+        def create_two_line_labels(labels):
+            result = []
+            for label in labels:
                 if "(" in label and ")" in label:
-                    # Split at the first parenthesis for two-line labels
                     parts = label.split("(", 1)
                     if len(parts) == 2:
-                        labels.append(f"{parts[0].strip()}\n({parts[1]}")
+                        result.append(f"{parts[0].strip()}\n({parts[1]}")
                     else:
-                        labels.append(label)
+                        result.append(label)
                 else:
-                    labels.append(label)
-            ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
-            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-            ax.set_ylabel("KB transferred")
-            ax.set_title(f"KB transferred — {label_scenario(scenario)}")
-            # Add value labels above bars with more spacing
-            max_val = max(sub["mean_bytes_kb"])
-            for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
-                       f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+                    result.append(label)
+            return result
         
-        plt.savefig(OUT_FIGS/"final_ablation_kb.png", bbox_inches="tight", dpi=DPI)
+        # 1. BAP KB transferred - Nightly Wi-Fi
+        fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
+        sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
+        x = np.arange(len(sub))
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+        ax.set_ylabel("KB transferred")
+        ax.set_title(f"KB transferred — {label_scenario('nightly_wifi')}")
+        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
+                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"bap_kb_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
-        # 4. Ablation Hit rate
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
+        # 2. BAP KB transferred - Bursty Cellular
+        fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
+        sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
+        x = np.arange(len(sub))
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+        ax.set_ylabel("KB transferred")
+        ax.set_title(f"KB transferred — {label_scenario('spotty_cellular')}")
+        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
+                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"bap_kb_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
         
-        for ax, scenario in [(axL, "nightly_wifi"), (axR, "spotty_cellular")]:
-            sub = ablation_agg[ablation_agg["scenario"] == scenario]
-            # Order: full, alpha0, beta0, gamma0, delta0
-            order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
-            sub = sub.set_index("ablation").loc[order].reset_index()
-            x = np.arange(len(sub))
-            bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
-            ax.set_xticks(x)
-            # Create two-line labels for better readability
-            labels = []
-            for label in sub["ablation_label"]:
-                if "(" in label and ")" in label:
-                    # Split at the first parenthesis for two-line labels
-                    parts = label.split("(", 1)
-                    if len(parts) == 2:
-                        labels.append(f"{parts[0].strip()}\n({parts[1]}")
-                    else:
-                        labels.append(label)
-                else:
-                    labels.append(label)
-            ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
-            ax.set_ylabel("Prefetch hit-rate (%)")
-            ax.set_ylim(0, 100)
-            ax.set_title(f"Prefetch hit-rate (%) — {label_scenario(scenario)}")
-            # Add value labels above bars with more spacing
-            for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 3,
-                       f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        # 3. BAP Hit rate - Nightly Wi-Fi
+        fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
+        sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
+        x = np.arange(len(sub))
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+        ax.set_ylabel("Prefetch hit-rate (%)")
+        ax.set_ylim(0, 100)
+        ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('nightly_wifi')}")
+        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"bap_hit_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
         
-        plt.savefig(OUT_FIGS/"final_ablation_hit.png", bbox_inches="tight", dpi=DPI)
+        # 4. BAP Hit rate - Bursty Cellular
+        fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
+        sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
+        x = np.arange(len(sub))
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
+        ax.set_ylabel("Prefetch hit-rate (%)")
+        ax.set_ylim(0, 100)
+        ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('spotty_cellular')}")
+        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"bap_hit_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 5. Ablation KB transferred - Nightly Wi-Fi
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6), constrained_layout=True)
+        sub = ablation_agg[ablation_agg["scenario"] == "nightly_wifi"]
+        order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+        sub = sub.set_index("ablation").loc[order].reset_index()
+        x = np.arange(len(sub))
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        labels = create_two_line_labels(sub["ablation_label"])
+        ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
+        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+        ax.set_ylabel("KB transferred")
+        ax.set_title(f"KB transferred — {label_scenario('nightly_wifi')}")
+        max_val = max(sub["mean_bytes_kb"])
+        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
+                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"ablation_kb_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 6. Ablation KB transferred - Bursty Cellular
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6), constrained_layout=True)
+        sub = ablation_agg[ablation_agg["scenario"] == "spotty_cellular"]
+        order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+        sub = sub.set_index("ablation").loc[order].reset_index()
+        x = np.arange(len(sub))
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        labels = create_two_line_labels(sub["ablation_label"])
+        ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
+        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+        ax.set_ylabel("KB transferred")
+        ax.set_title(f"KB transferred — {label_scenario('spotty_cellular')}")
+        max_val = max(sub["mean_bytes_kb"])
+        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val*0.03,
+                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"ablation_kb_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 7. Ablation Hit rate - Nightly Wi-Fi
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6), constrained_layout=True)
+        sub = ablation_agg[ablation_agg["scenario"] == "nightly_wifi"]
+        order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+        sub = sub.set_index("ablation").loc[order].reset_index()
+        x = np.arange(len(sub))
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        labels = create_two_line_labels(sub["ablation_label"])
+        ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
+        ax.set_ylabel("Prefetch hit-rate (%)")
+        ax.set_ylim(0, 100)
+        ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('nightly_wifi')}")
+        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 3,
+                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"ablation_hit_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
+        plt.close()
+        
+        # 8. Ablation Hit rate - Bursty Cellular
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6), constrained_layout=True)
+        sub = ablation_agg[ablation_agg["scenario"] == "spotty_cellular"]
+        order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
+        sub = sub.set_index("ablation").loc[order].reset_index()
+        x = np.arange(len(sub))
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        ax.set_xticks(x)
+        labels = create_two_line_labels(sub["ablation_label"])
+        ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
+        ax.set_ylabel("Prefetch hit-rate (%)")
+        ax.set_ylim(0, 100)
+        ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('spotty_cellular')}")
+        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 3,
+                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+        plt.savefig(OUT_FIGS/"ablation_hit_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
         plt.close()
     
     create_final_figures()
@@ -539,10 +584,14 @@ def verify():
         OUT_DATA/"bap_ablation_study_aggregates.csv",
     ]
     req_figs = [
-        OUT_FIGS/"final_bap_kb.png",
-        OUT_FIGS/"final_bap_hit.png",
-        OUT_FIGS/"final_ablation_kb.png",
-        OUT_FIGS/"final_ablation_hit.png",
+        OUT_FIGS/"bap_kb_nightly_wifi.png",
+        OUT_FIGS/"bap_kb_spotty_cellular.png",
+        OUT_FIGS/"bap_hit_nightly_wifi.png",
+        OUT_FIGS/"bap_hit_spotty_cellular.png",
+        OUT_FIGS/"ablation_kb_nightly_wifi.png",
+        OUT_FIGS/"ablation_kb_spotty_cellular.png",
+        OUT_FIGS/"ablation_hit_nightly_wifi.png",
+        OUT_FIGS/"ablation_hit_spotty_cellular.png",
     ]
     miss = [str(p) for p in req_csvs+req_figs if not p.exists()]
     if miss: raise SystemExit("Missing artifacts:\n- "+"\n- ".join(miss))
