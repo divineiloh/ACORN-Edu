@@ -261,95 +261,17 @@ def run_all():
         aggA[col] = aggA[col].round(1)
     aggA.to_csv(OUT_DATA/"bap_ablation_study_aggregates.csv", index=False)
 
-    # -------- figures (one metric per image) --------
-    # Add human-friendly labels to aggregates
-    agg["scenario_label"] = agg["scenario"].map(label_scenario)
-    agg["policy_label"] = agg["policy"].map(label_policy)
+    # -------- Generate final figures --------
+    # First, compute ablation deltas
+    from scripts.compute_ablation_deltas import compute_ablation_deltas
+    compute_ablation_deltas(
+        OUT_DATA/"bap_ablation_study_aggregates.csv",
+        "results/ablation/ablation_summary_by_scenario.csv"
+    )
     
-    plt.figure(figsize=(6,4))
-    for sc in SCENARIOS.keys():
-        sub = agg[agg["scenario"]==sc]
-        x = np.arange(len(sub))
-        plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
-        plt.xticks(x, sub["policy_label"], rotation=0)
-        plt.ylabel("KB transferred")
-        plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-        plt.title(f"KB transferred – {label_scenario(sc)}")
-        plt.tight_layout()
-        plt.savefig(OUT_FIGS/f"bap_bytes_comparison_{sc}.png", dpi=DPI)
-        plt.close()
-
-    # per-scenario hit-rate plots (%)
-    plt.figure(figsize=(6,4))
-    for sc in SCENARIOS.keys():
-        sub = agg[agg["scenario"]==sc]
-        x = np.arange(len(sub))
-        plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
-        plt.xticks(x, sub["policy_label"], rotation=0)
-        plt.ylabel("Prefetch hit-rate (%)")
-        plt.title(f"Prefetch hit-rate (%) – {label_scenario(sc)}")
-        plt.tight_layout()
-        plt.savefig(OUT_FIGS/f"bap_hit_rate_comparison_{sc}.png", dpi=DPI)
-        plt.close()
-
-    # default-named pair for quick checks (bigger canvas + two-line ticks)
-    sub = agg.sort_values(["scenario","policy"]).reset_index(drop=True)
-    x = np.arange(len(sub))
-    xt = [f"{label_scenario(sc)}\n{label_policy(pol)}" for sc, pol in zip(sub["scenario"], sub["policy"])]
-
-    plt.figure(figsize=(10, 5))
-    plt.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **ERR_KW, **BAR_EDGE_KW)
-    plt.xticks(x, xt, rotation=0, ha="center")
-    plt.ylabel("KB transferred")
-    plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-    plt.gcf().subplots_adjust(bottom=0.25)  # prevent label overlap
-    plt.tight_layout()
-    plt.savefig(OUT_FIGS/"bap_bytes_comparison.png", dpi=DPI)
-    plt.close()
-
-    plt.figure(figsize=(10, 5))
-    plt.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **ERR_KW, **BAR_EDGE_KW)
-    plt.xticks(x, xt, rotation=0, ha="center")
-    plt.ylabel("Prefetch hit-rate (%)")
-    plt.gcf().subplots_adjust(bottom=0.25)
-    plt.tight_layout()
-    plt.savefig(OUT_FIGS/"bap_hit_rate_comparison.png", dpi=DPI)
-    plt.close()
-
-    # -------- Ablation figures (acorn only, from RAW trials for correct CI) --------
-    # Recompute ablation means + CIs from per-trial data (dfa) across all scenarios.
-    def _agg_with_ci(df_series):
-        return pd.Series({
-            "mean": df_series.mean(),
-            "ci95": t_ci(df_series.to_numpy())
-        })
-    abl_bytes = dfa.groupby("ablation")["bytes_kb"].apply(_agg_with_ci).unstack()
-    abl_hit   = dfa.groupby("ablation")["hit_rate"].apply(_agg_with_ci).unstack()
-    # Pretty order + labels
-    abl_order = ["full","alpha0","beta0","gamma0","delta0"]
-    x = np.arange(len(abl_order))
-    labels = [label_ablation(a) for a in abl_order]
-
-    plt.figure(figsize=(12,5))
-    plt.bar(x, 100*abl_hit.loc[abl_order,"mean"], yerr=100*abl_hit.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#9bd0ff")
-    plt.xticks(x, labels, rotation=0, ha="center")
-    plt.ylabel("Prefetch hit-rate (%)")
-    plt.title("Ablations (Acorn): Prefetch Hit-Rate (%)")
-    plt.gcf().subplots_adjust(bottom=0.30)
-    plt.tight_layout()
-    plt.savefig(OUT_FIGS/"ablation_hit_rate.png", dpi=DPI)
-    plt.close()
-
-    plt.figure(figsize=(12,5))
-    plt.bar(x, abl_bytes.loc[abl_order,"mean"], yerr=abl_bytes.loc[abl_order,"ci95"], **ERR_KW, **BAR_EDGE_KW, color="#ffb3b3")
-    plt.xticks(x, labels, rotation=0, ha="center")
-    plt.ylabel("KB transferred")
-    plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-    plt.title("Ablations (Acorn): KB transferred")
-    plt.gcf().subplots_adjust(bottom=0.30)
-    plt.tight_layout()
-    plt.savefig(OUT_FIGS/"ablation_bytes.png", dpi=DPI)
-    plt.close()
+    # Generate the 4 final figures
+    from scripts.generate_final_figures import create_final_figures
+    create_final_figures()
 
     # metadata
     # obtain current git commit (if available)
@@ -379,10 +301,10 @@ def verify():
         OUT_DATA/"bap_ablation_study_aggregates.csv",
     ]
     req_figs = [
-        OUT_FIGS/"bap_hit_rate_comparison.png",
-        OUT_FIGS/"bap_bytes_comparison.png",
-        OUT_FIGS/"ablation_hit_rate.png",
-        OUT_FIGS/"ablation_bytes.png",
+        Path("results/figures/final_bap_kb.png"),
+        Path("results/figures/final_bap_hit.png"),
+        Path("results/figures/final_ablation_kb.png"),
+        Path("results/figures/final_ablation_hit.png"),
     ]
     miss = [str(p) for p in req_csvs+req_figs if not p.exists()]
     if miss: raise SystemExit("Missing artifacts:\n- "+"\n- ".join(miss))

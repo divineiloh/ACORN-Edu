@@ -73,8 +73,9 @@ make figures
 ```
 results/
   run_meta.json
-  bap/{bap_trials.csv, bap_summary.csv, fig_bap_kb_by_policy.png, fig_bap_hit_by_policy.png}
-  ablation/{ablation_trials.csv, ablation_summary.csv, fig_ablation_kb.png, fig_ablation_hit.png}
+  bap/{bap_trials.csv, bap_summary.csv}
+  ablation/{ablation_trials.csv, ablation_summary.csv, ablation_summary_by_scenario.csv}
+  figures/{final_bap_kb.png, final_bap_hit.png, final_ablation_kb.png, final_ablation_hit.png}
 ```
 
 * `data/bap_network_scenario_results.csv`
@@ -82,13 +83,9 @@ results/
 * `data/bap_ablation_study_results.csv`
 * `data/bap_ablation_study_aggregates.csv`
 * `data/run_metadata.json`
-* `figures/bap_bytes_comparison.png` - KB transferred by Policy (Nightly Wi-Fi Window vs Bursty Cellular)
-* `figures/bap_hit_rate_comparison.png` - Prefetch hit-rate (%) by Policy (Nightly Wi-Fi Window vs Bursty Cellular)
-* `figures/bap_bytes_comparison_nightly_wifi.png` - KB transferred by Policy (Nightly Wi-Fi Window)
-* `figures/bap_hit_rate_comparison_nightly_wifi.png` - Prefetch hit-rate (%) by Policy (Nightly Wi-Fi Window)
-* `figures/bap_bytes_comparison_spotty_cellular.png` - KB transferred by Policy (Bursty Cellular)
-* `figures/bap_hit_rate_comparison_spotty_cellular.png` - Prefetch hit-rate (%) by Policy (Bursty Cellular)
-* `figures/ablation_hit_rate.png` - Ablations (Acorn): Prefetch Hit-Rate (%)
-* `figures/ablation_bytes.png` - Ablations (Acorn): KB transferred
+* `results/figures/final_bap_kb.png` - KB transferred by Policy (Nightly Wi-Fi Window | Bursty Cellular)
+* `results/figures/final_bap_hit.png` - Prefetch hit-rate (%) by Policy (Nightly Wi-Fi Window | Bursty Cellular)
+* `results/figures/final_ablation_kb.png` - Ablations: KB transferred (Nightly Wi-Fi Window | Bursty Cellular)
+* `results/figures/final_ablation_hit.png` - Ablations: Prefetch hit-rate (%) (Nightly Wi-Fi Window | Bursty Cellular)
 
-All figures show means ±95% CI over N=30 seeded trials; **KB units only**.
+All bars show **means ±95% Student-t CI** over **N=30** seeded trials; **KB units** for bytes. Whole-File LRU downloads **entire assets** ordered by earliest deadline with LRU cache; **no** chunk/delta logic.
