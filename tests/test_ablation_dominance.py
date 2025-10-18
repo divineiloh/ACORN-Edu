@@ -5,7 +5,7 @@ from pathlib import Path
 
 def test_ablation_dominance():
     """Test that no ablation strictly dominates FULL on both metrics in any scenario."""
-    results_path = Path("data/bap_ablation_study_aggregates.csv")
+    results_path = Path("results/ablation/ablation_summary_by_scenario.csv")
     
     if not results_path.exists():
         print("ERROR: Ablation results file not found. Run the ablation study first.")
