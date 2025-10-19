@@ -7,7 +7,7 @@ This repo contains a **one-file** simulation harness for an offline-first delive
 - Trials/Stats: **N=30** trials per scenario×policy; **two-sided 95% Student-t CIs**
 - Units: **KB only** for sizes; any size column ends with `_kb`
 - KB axes use plain integers with thousands separators; scientific tick offsets are disabled
-- Outputs: `data/*.csv`, `data/run_metadata.json`, `figures/*.png`
+- Outputs: `results/data/*.csv`, `results/data/run_metadata.json`, `results/figures/*.png`
 - The script **self-verifies** and exits non-zero if anything is off
 
 ## Policies
@@ -72,20 +72,23 @@ make figures
 
 ```
 results/
-  run_meta.json
-  bap/{bap_trials.csv, bap_summary.csv}
-  ablation/{ablation_trials.csv, ablation_summary.csv, ablation_summary_by_scenario.csv}
-  figures/{final_bap_kb.png, final_bap_hit.png, final_ablation_kb.png, final_ablation_hit.png}
+  data/
+    bap_network_scenario_results.csv
+    bap_network_scenario_aggregates.csv
+    bap_ablation_study_results.csv
+    bap_ablation_study_aggregates.csv
+    run_metadata.json
+  figures/
+    bap_kb_nightly_wifi.png
+    bap_kb_spotty_cellular.png
+    bap_hit_nightly_wifi.png
+    bap_hit_spotty_cellular.png
+    ablation_kb_nightly_wifi.png
+    ablation_kb_spotty_cellular.png
+    ablation_hit_nightly_wifi.png
+    ablation_hit_spotty_cellular.png
+  ablation/
+    ablation_summary_by_scenario.csv
 ```
-
-* `data/bap_network_scenario_results.csv`
-* `data/bap_network_scenario_aggregates.csv`
-* `data/bap_ablation_study_results.csv`
-* `data/bap_ablation_study_aggregates.csv`
-* `data/run_metadata.json`
-* `results/figures/final_bap_kb.png` - KB transferred by Policy (Nightly Wi-Fi Window | Bursty Cellular)
-* `results/figures/final_bap_hit.png` - Prefetch hit-rate (%) by Policy (Nightly Wi-Fi Window | Bursty Cellular)
-* `results/figures/final_ablation_kb.png` - Ablations: KB transferred (Nightly Wi-Fi Window | Bursty Cellular)
-* `results/figures/final_ablation_hit.png` - Ablations: Prefetch hit-rate (%) (Nightly Wi-Fi Window | Bursty Cellular)
 
 All bars show **means ±95% Student-t CI** over **N=30** seeded trials; **KB units** for bytes. Whole-File LRU downloads **entire assets** ordered by earliest deadline with LRU cache; **no** chunk/delta logic.
