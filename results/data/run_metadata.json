@@ -1,0 +1,20 @@
+{
+  "commit": "563a748",
+  "timestamp_utc": "2025-10-19T05:22:46Z",
+  "n_trials": 3,
+  "seed_base": 2025,
+  "scenarios": [
+    "nightly_wifi",
+    "spotty_cellular"
+  ],
+  "policies": [
+    "acorn",
+    "LRU_whole"
+  ],
+  "ablations": [
+    "alpha0",
+    "beta0",
+    "gamma0",
+    "delta0"
+  ]
+}
