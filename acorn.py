@@ -386,6 +386,20 @@ def run_all():
     
     compute_ablation_deltas()
     
+    # Guardrail: Statistical ablation dominance check (paired t-tests + practical margins)
+    def check_ablation_dominance_stats():
+        import subprocess
+        import sys
+        result = subprocess.run([sys.executable, "scripts/assert_ablation_binding_stats.py"], 
+                              capture_output=True, text=True)
+        if result.returncode != 0:
+            print(result.stdout)
+            print(result.stderr)
+            raise SystemExit(f"Statistical guardrail FAILED: {result.returncode}")
+        print(result.stdout)
+    
+    check_ablation_dominance_stats()
+    
     # Generate 8 individual figures for LaTeX paper submission
     def create_final_figures():
         # Load data
