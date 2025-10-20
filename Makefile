@@ -19,5 +19,8 @@ ablation:
 figures:
 	. .venv/bin/activate && python acorn.py
 
+run-quick:
+	. .venv/bin/activate && python acorn.py --quick
+
 clean:
-	rm -f data/*.csv data/run_metadata.json figures/*.png
+	rm -rf results/

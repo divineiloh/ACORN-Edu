@@ -1,8 +1,8 @@
 {
-  "commit": "cefe604",
-  "timestamp_utc": "2025-10-20T01:03:37Z",
-  "n_trials": 30,
-  "seed_base": 2025,
+  "commit": "14f47ae",
+  "timestamp_utc": "2025-10-20T01:10:17Z",
+  "n_trials": 3,
+  "seed_base": 1337,
   "scenarios": [
     "nightly_wifi",
     "spotty_cellular"
