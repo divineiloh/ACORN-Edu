@@ -550,15 +550,15 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.set_ylabel("KB transferred")
         ax.set_title(f"KB transferred — {label_scenario('nightly_wifi')}")
-        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+        for i, (bar, val, ci) in enumerate(zip(bars, sub["mean_bytes_kb"], sub["ci95_bytes_kb"])):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
-                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+                   f"{val:,.0f}\n±{ci:,.0f}", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"bap_kb_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
@@ -566,15 +566,15 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
         ax.set_ylabel("KB transferred")
         ax.set_title(f"KB transferred — {label_scenario('spotty_cellular')}")
-        for i, (bar, val) in enumerate(zip(bars, sub["mean_bytes_kb"])):
+        for i, (bar, val, ci) in enumerate(zip(bars, sub["mean_bytes_kb"], sub["ci95_bytes_kb"])):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sub["mean_bytes_kb"])*0.01,
-                   f"{val:,.0f}", ha="center", va="bottom", fontsize=10)
+                   f"{val:,.0f}\n±{ci:,.0f}", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"bap_kb_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
@@ -582,15 +582,15 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.set_ylabel("Prefetch hit-rate (%)")
         ax.set_ylim(0, 100)
         ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('nightly_wifi')}")
-        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+        for i, (bar, val, ci) in enumerate(zip(bars, 100*sub["mean_hit_rate"], 100*sub["ci95_hit_rate"])):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+                   f"{val:.0f}%\n±{ci:.0f}pp", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"bap_hit_nightly_wifi.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
@@ -598,15 +598,15 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.set_ylabel("Prefetch hit-rate (%)")
         ax.set_ylim(0, 100)
         ax.set_title(f"Prefetch hit-rate (%) — {label_scenario('spotty_cellular')}")
-        for i, (bar, val) in enumerate(zip(bars, 100*sub["mean_hit_rate"])):
+        for i, (bar, val, ci) in enumerate(zip(bars, 100*sub["mean_hit_rate"], 100*sub["ci95_hit_rate"])):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                   f"{val:.0f}%", ha="center", va="bottom", fontsize=10)
+                   f"{val:.0f}%\n±{ci:.0f}pp", ha="center", va="bottom", fontsize=10)
         plt.savefig(OUT_FIGS/"bap_hit_spotty_cellular.png", bbox_inches="tight", dpi=DPI)
         plt.close()
         
@@ -616,7 +616,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -639,7 +639,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -662,7 +662,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -681,7 +681,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
