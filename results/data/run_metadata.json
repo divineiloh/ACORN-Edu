@@ -1,8 +1,8 @@
 {
-  "commit": "563a748",
-  "timestamp_utc": "2025-10-19T05:22:46Z",
+  "commit": "79ff287",
+  "timestamp_utc": "2025-10-20T00:44:58Z",
   "n_trials": 3,
-  "seed_base": 2025,
+  "seed_base": 1337,
   "scenarios": [
     "nightly_wifi",
     "spotty_cellular"
