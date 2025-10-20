@@ -34,7 +34,11 @@ ABLATION_LABEL = {
 def label_scenario(x: str) -> str: return SCENARIO_LABEL.get(x, x)
 def label_policy(x: str) -> str:   return POLICY_LABEL.get(x, x)
 def label_ablation(x: str) -> str: return ABLATION_LABEL.get(x, x)
-plt.rcParams["font.size"] = 12  # enforce readable fonts across all plots
+plt.rcParams["font.size"] = 14  # enforce readable fonts across all plots
+plt.rcParams["axes.titlesize"] = 18
+plt.rcParams["axes.labelsize"] = 16
+plt.rcParams["xtick.labelsize"] = 12
+plt.rcParams["ytick.labelsize"] = 12
 # unified errorbar styling (consistent across all figures)
 ERR_KW = dict(capsize=6)
 BAR_EDGE_KW = dict(edgecolor="black", linewidth=0.6)
@@ -294,6 +298,16 @@ def t_ci(series: np.ndarray, alpha=0.05) -> float:
     half = tcrit * s / math.sqrt(n)
     return half
 
+def paired_t_test(values1, values2):
+    """Paired t-test for comparing two sets of values"""
+    if len(values1) != len(values2):
+        raise ValueError("Values must be paired (same length)")
+    t_stat, p_value = stats.ttest_rel(values1, values2)
+    # Effect size (Cohen's d for paired samples)
+    diff = np.array(values1) - np.array(values2)
+    cohens_d = np.mean(diff) / (np.std(diff, ddof=1) + 1e-10)
+    return t_stat, p_value, cohens_d
+
 def run_all():
     # clean up old results
     import glob
@@ -430,7 +444,7 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -446,7 +460,7 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
@@ -462,7 +476,7 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "nightly_wifi"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.set_ylabel("Prefetch hit-rate (%)")
@@ -478,7 +492,7 @@ def run_all():
         fig, ax = plt.subplots(1, 1, figsize=(6, 5), constrained_layout=True)
         sub = policy_agg[policy_agg["scenario"] == "spotty_cellular"]
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         ax.set_xticklabels(sub["policy_label"], rotation=0, ha="center")
         ax.set_ylabel("Prefetch hit-rate (%)")
@@ -496,7 +510,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -519,7 +533,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, sub["mean_bytes_kb"], **BAR_EDGE_KW)
+        bars = ax.bar(x, sub["mean_bytes_kb"], yerr=sub["ci95_bytes_kb"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -542,7 +556,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -561,7 +575,7 @@ def run_all():
         order = ["full", "alpha0", "beta0", "gamma0", "delta0"]
         sub = sub.set_index("ablation").loc[order].reset_index()
         x = np.arange(len(sub))
-        bars = ax.bar(x, 100*sub["mean_hit_rate"], **BAR_EDGE_KW)
+        bars = ax.bar(x, 100*sub["mean_hit_rate"], yerr=100*sub["ci95_hit_rate"], **BAR_EDGE_KW, **ERR_KW)
         ax.set_xticks(x)
         labels = create_two_line_labels(sub["ablation_label"])
         ax.set_xticklabels(labels, rotation=0, ha="center", fontsize=10)
@@ -659,6 +673,7 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="ACORN-Edu single-file harness")
     ap.add_argument("--trials", type=int, default=N_TRIALS, help="override number of trials (default: 30)")
+    ap.add_argument("--quick", action="store_true", help="quick test mode: N=3 trials")
     ap.add_argument("--seed-base", type=int, default=RNG_SEED_BASE, help="override base RNG seed (default: 1337)")
     ap.add_argument("--policy", choices=["acorn", "LRU_whole"], default="acorn", help="policy to run")
     ap.add_argument("--scenario", choices=list(SCENARIOS.keys()), help="scenario to run")
@@ -681,7 +696,7 @@ if __name__ == "__main__":
     elif args.delta0: ablation = "delta0"
 
     # override globals for this run
-    N_TRIALS = args.trials
+    N_TRIALS = 3 if args.quick else args.trials
     RNG_SEED_BASE = args.seed_base
 
     # If specific scenario/policy/ablation specified, run single trial
