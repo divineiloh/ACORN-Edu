@@ -262,13 +262,8 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
     bytes_kb = 0.0; hits = 0
     q = sorted(assets, key=lambda a: a.deadline_s)
     
-    # Debug: Check asset deadlines
-    debug_info = {
-        "total_assets": len(assets),
-        "earliest_deadline": min(a.deadline_s for a in assets),
-        "latest_deadline": max(a.deadline_s for a in assets),
-        "window_times": [(s, e) for s, e, _ in windows]
-    }
+    # Track partial downloads across windows
+    partial_downloads = {}  # asset_id -> bytes_downloaded
     
     for s,e,kbps in windows:
         t = s
@@ -288,7 +283,22 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
             # Calculate remaining budget for this asset
             remaining_budget = window_budget - window_used
             need_kb = a.size_kb
-            use_kb = min(remaining_budget, need_kb)
+            
+            # Check if we have partial download from previous windows
+            already_downloaded = partial_downloads.get(a.aid, 0)
+            still_needed = need_kb - already_downloaded
+            
+            if still_needed <= 0:
+                # Already fully downloaded
+                cache.append(a.aid)
+                if len(cache) > CACHE_CAP: cache.pop(0)
+                downloaded.add(a.aid)
+                if t <= a.deadline_s: hits += 1
+                qi += 1
+                continue
+            
+            # Try to download what we still need
+            use_kb = min(remaining_budget, still_needed)
             
             if use_kb > 0:
                 bytes_kb += use_kb
@@ -297,27 +307,26 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
                 download_time = use_kb / max(kbps/8.0, 1)  # Time in seconds
                 t += max(1, int(download_time))
                 
-                # Only count as downloaded if we got the full asset
-                if use_kb >= need_kb:
+                # Update partial download tracking
+                partial_downloads[a.aid] = already_downloaded + use_kb
+                
+                # Check if we completed the asset
+                if partial_downloads[a.aid] >= need_kb:
                     cache.append(a.aid)
                     if len(cache) > CACHE_CAP: cache.pop(0)
                     downloaded.add(a.aid)
                     if t <= a.deadline_s: hits += 1
+                    # Remove from partial tracking since it's complete
+                    del partial_downloads[a.aid]
                     qi += 1
                 else:
-                    # Partial download - continue with next asset
+                    # Still partial - continue with next asset
                     qi += 1
             else:
                 # No budget left
                 break
     
     hit_rate = hits / max(1,len(assets))
-    
-    # Debug: Print results for first trial only
-    if len(downloaded) == 0:  # Only print if no hits
-        print(f"LRU Debug: {debug_info}")
-        print(f"LRU Results: downloaded={len(downloaded)}, hits={hits}, hit_rate={hit_rate:.3f}")
-    
     return bytes_kb, hit_rate
 
 # -------------------- RUNNERS --------------------
