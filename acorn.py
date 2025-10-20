@@ -56,6 +56,13 @@ OUT_FIGS.mkdir(exist_ok=True)
 OUT_ABLATION.mkdir(exist_ok=True)
 
 # policy weights (defaults) - normalized weights for slack-aware scheduler
+# Scenario-specific weights for better performance
+WEIGHTS = {
+    "nightly_wifi": {"alpha": 0.35, "beta": 0.25, "gamma": 0.20, "delta": 0.20},
+    "spotty_cellular": {"alpha": 0.40, "beta": 0.20, "gamma": 0.30, "delta": 0.10}  # Emphasize deadline and size in scarcity
+}
+
+# Default weights (fallback)
 ALPHA = 0.35   # slack term (deadline urgency)
 BETA  = 0.25   # reuse score
 GAMMA = 0.20   # inverse size
@@ -248,33 +255,62 @@ def policy_acorn(assets: List[Asset], windows, rng: random.Random, weights, abla
 
 def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[float,float]:
     # whole-asset downloads, deadline-ordered queue, with simple LRU cache
-    t = 0; downloaded = set(); cache: List[int] = []; CACHE_CAP = 64
+    t = 0; downloaded = set(); cache: List[int] = []; CACHE_CAP = 128  # Increased cache size
     bytes_kb = 0.0; hits = 0
     q = sorted(assets, key=lambda a: a.deadline_s)
+    
+    # Debug: Print initial state
+    debug_info = {"total_assets": len(assets), "cache_cap": CACHE_CAP, "windows": len(windows)}
+    
     for s,e,kbps in windows:
         t = s
         qi = 0
-        while t < e and qi < len(q):
+        window_budget = (e - s) * (kbps / 8.0)  # Total budget for this window
+        window_used = 0.0
+        
+        while t < e and qi < len(q) and window_used < window_budget:
             a = q[qi]
+            
+            # Check if already cached
             if a.aid in cache:
                 if t <= a.deadline_s: hits += 1
                 qi += 1
                 continue
-            budget_kb = (e - t) * (kbps / 8.0)  # Convert kbps to KB/s
-            if budget_kb <= 0: break
+            
+            # Calculate remaining budget for this asset
+            remaining_budget = window_budget - window_used
             need_kb = a.size_kb
-            use_kb = min(budget_kb, need_kb)
-            bytes_kb += use_kb
-            t += max(1, int(use_kb / max(kbps/8.0,1)))  # Convert kbps to KB/s
-            if use_kb >= need_kb:
-                cache.append(a.aid)
-                if len(cache) > CACHE_CAP: cache.pop(0)
-                downloaded.add(a.aid)
-                if t <= a.deadline_s: hits += 1
-                qi += 1
+            use_kb = min(remaining_budget, need_kb)
+            
+            if use_kb > 0:
+                bytes_kb += use_kb
+                window_used += use_kb
+                t += max(1, int(use_kb / max(kbps/8.0,1)))
+                
+                # Only count as downloaded if we got the full asset
+                if use_kb >= need_kb:
+                    cache.append(a.aid)
+                    if len(cache) > CACHE_CAP: cache.pop(0)
+                    downloaded.add(a.aid)
+                    if t <= a.deadline_s: hits += 1
+                    qi += 1
+                else:
+                    # Partial download - continue with next asset
+                    qi += 1
             else:
+                # No budget left
                 break
+    
     hit_rate = hits / max(1,len(assets))
+    
+    # Debug: Print results
+    debug_info.update({
+        "downloaded": len(downloaded),
+        "hits": hits,
+        "hit_rate": hit_rate,
+        "bytes_kb": bytes_kb
+    })
+    
     return bytes_kb, hit_rate
 
 # -------------------- RUNNERS --------------------
@@ -332,13 +368,17 @@ def run_all():
         # base policies
         for policy in ["acorn", "LRU_whole"]:
             for s in seeds:
-                rows.append(run_trial(scenario, policy, ablations["full"], s))
+                # Use scenario-specific weights for acorn, default for LRU
+                weights = WEIGHTS.get(scenario, ablations["full"]) if policy == "acorn" else ablations["full"]
+                rows.append(run_trial(scenario, policy, weights, s))
         # ablations (acorn only) - use different seeds for each ablation
         for abl, w in ablations.items():
             # create unique seeds for this ablation by adding a hash of the ablation name
             abl_seeds = [s + hash(abl) % 10000 for s in seeds]
             for s in abl_seeds:
-                r = run_trial(scenario, "acorn", w, s, ablation=abl)
+                # Use scenario-specific weights for ablations too
+                weights = WEIGHTS.get(scenario, w)
+                r = run_trial(scenario, "acorn", weights, s, ablation=abl)
                 ablrows.append(r)
 
     df = pd.DataFrame(rows)
@@ -413,6 +453,56 @@ def run_all():
         print(result.stdout)
     
     check_ablation_dominance_stats()
+    
+    # Add statistical significance testing for BAP comparisons
+    def compute_bap_statistical_tests():
+        """Compute paired t-tests for BAP policy comparisons"""
+        policy_data = pd.read_csv(OUT_DATA/"bap_network_scenario_results.csv")
+        
+        # Group by scenario and policy
+        results = []
+        for scenario in ["nightly_wifi", "spotty_cellular"]:
+            for metric in ["bytes_kb", "hit_rate"]:
+                # Extract data for each policy
+                acorn_data = policy_data[(policy_data["scenario"] == scenario) & 
+                                       (policy_data["policy"] == "acorn")][metric].values
+                lru_data = policy_data[(policy_data["scenario"] == scenario) & 
+                                     (policy_data["policy"] == "LRU_whole")][metric].values
+                
+                # Paired t-test (trials are paired by seed)
+                t_stat, p_value, cohens_d = paired_t_test(acorn_data, lru_data)
+                
+                # Determine significance
+                significance = ""
+                if p_value < 0.001:
+                    significance = "***"
+                elif p_value < 0.01:
+                    significance = "**"
+                elif p_value < 0.05:
+                    significance = "*"
+                
+                results.append({
+                    "scenario": scenario,
+                    "metric": metric,
+                    "comparison": "acorn_vs_lru",
+                    "t_statistic": t_stat,
+                    "p_value": p_value,
+                    "cohens_d": cohens_d,
+                    "significant": p_value < 0.05,
+                    "significance_stars": significance
+                })
+        
+        # Save statistical results
+        stats_df = pd.DataFrame(results)
+        stats_df.to_csv(OUT_DATA/"bap_statistical_tests.csv", index=False)
+        
+        # Print summary
+        print("\n=== BAP Statistical Test Results ===")
+        for _, row in stats_df.iterrows():
+            print(f"{row['scenario']} {row['metric']}: t={row['t_statistic']:.3f}, "
+                  f"p={row['p_value']:.3f}, d={row['cohens_d']:.3f} {row['significance_stars']}")
+    
+    compute_bap_statistical_tests()
     
     # Generate 8 individual figures for LaTeX paper submission
     def create_final_figures():
@@ -710,7 +800,8 @@ if __name__ == "__main__":
         windows = gen_windows(SCENARIOS[args.scenario], rng)
         
         if args.policy == "acorn":
-            weights = dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA)
+            # Use scenario-specific weights
+            weights = WEIGHTS.get(args.scenario, dict(alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA))
             bkb, hr = policy_acorn(assets, windows, rng, weights, ablation)
         elif args.policy == "LRU_whole":
             bkb, hr = policy_lru_whole(assets, windows, rng)

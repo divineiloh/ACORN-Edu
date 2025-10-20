@@ -1,0 +1,5 @@
+scenario,metric,comparison,t_statistic,p_value,cohens_d,significant,significance_stars
+nightly_wifi,bytes_kb,acorn_vs_lru,27.967229149007654,0.0012760545014576289,16.146887277667066,True,**
+nightly_wifi,hit_rate,acorn_vs_lru,9.999999999999995,0.009852457023325703,5.773502681896256,True,**
+spotty_cellular,bytes_kb,acorn_vs_lru,4.687511145802953,0.0426223428335045,2.7063358218550464,True,*
+spotty_cellular,hit_rate,acorn_vs_lru,4.0,0.05719095841793663,2.3094010727585026,False,
