@@ -77,7 +77,10 @@ SCENARIOS = {
 # asset model
 N_ASSETS = 120
 MIN_SIZE_KB, MAX_SIZE_KB = 512, 20000  # 0.5–20 MB
-MIN_DEADLINE_S, MAX_DEADLINE_S = 3_600, 48*3_600
+# Deadlines should be AFTER connectivity windows to make sense
+# For nightly_wifi: windows are ~7 hours, so deadlines should be 8-24 hours later
+# For spotty_cellular: windows are scattered, so deadlines should be 1-48 hours later
+MIN_DEADLINE_S, MAX_DEADLINE_S = 8*3_600, 48*3_600  # 8 hours to 48 hours
 REUSE_PROB = 0.5  # fraction of chunks expected reusable
 
 # plotting
@@ -255,12 +258,17 @@ def policy_acorn(assets: List[Asset], windows, rng: random.Random, weights, abla
 
 def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[float,float]:
     # whole-asset downloads, deadline-ordered queue, with simple LRU cache
-    t = 0; downloaded = set(); cache: List[int] = []; CACHE_CAP = 128  # Increased cache size
+    t = 0; downloaded = set(); cache: List[int] = []; CACHE_CAP = 128
     bytes_kb = 0.0; hits = 0
     q = sorted(assets, key=lambda a: a.deadline_s)
     
-    # Debug: Print initial state
-    debug_info = {"total_assets": len(assets), "cache_cap": CACHE_CAP, "windows": len(windows)}
+    # Debug: Check asset deadlines
+    debug_info = {
+        "total_assets": len(assets),
+        "earliest_deadline": min(a.deadline_s for a in assets),
+        "latest_deadline": max(a.deadline_s for a in assets),
+        "window_times": [(s, e) for s, e, _ in windows]
+    }
     
     for s,e,kbps in windows:
         t = s
@@ -285,7 +293,9 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
             if use_kb > 0:
                 bytes_kb += use_kb
                 window_used += use_kb
-                t += max(1, int(use_kb / max(kbps/8.0,1)))
+                # Update time based on actual download time
+                download_time = use_kb / max(kbps/8.0, 1)  # Time in seconds
+                t += max(1, int(download_time))
                 
                 # Only count as downloaded if we got the full asset
                 if use_kb >= need_kb:
@@ -303,13 +313,10 @@ def policy_lru_whole(assets: List[Asset], windows, rng: random.Random) -> Tuple[
     
     hit_rate = hits / max(1,len(assets))
     
-    # Debug: Print results
-    debug_info.update({
-        "downloaded": len(downloaded),
-        "hits": hits,
-        "hit_rate": hit_rate,
-        "bytes_kb": bytes_kb
-    })
+    # Debug: Print results for first trial only
+    if len(downloaded) == 0:  # Only print if no hits
+        print(f"LRU Debug: {debug_info}")
+        print(f"LRU Results: downloaded={len(downloaded)}, hits={hits}, hit_rate={hit_rate:.3f}")
     
     return bytes_kb, hit_rate
 
