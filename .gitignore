@@ -100,3 +100,9 @@ venv/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Internal revision/review files
+revision_changes_sections_1-3.md
+response_to_reviewers.md
+manuscript after review.md
+Acorn-Edu Submitted Manuscript.txt
